@@ -1,6 +1,6 @@
 .DS_Store
+data
 presentations
 hackernews_stories.parquet
 text8
-week1/cbow_final.pt
-week1/cbow_final_with_vocab.pt
+cbow_final.pt
