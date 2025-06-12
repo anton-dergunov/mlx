@@ -2,3 +2,5 @@
 presentations
 hackernews_stories.parquet
 text8
+week1/cbow_final.pt
+week1/cbow_final_with_vocab.pt
