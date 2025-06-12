@@ -32,21 +32,42 @@ echo "🧾 Git config to set remotely:"
 echo "   user.name  = $GIT_USER_NAME"
 echo "   user.email = $GIT_USER_EMAIL"
 
-# === SSH and set Git config + clone repo ===
-ssh -i "$SSH_KEY" -p "$REMOTE_PORT" "root@$REMOTE_HOST" bash <<EOF
-  set -e
-  git config --global user.name "$GIT_USER_NAME"
-  git config --global user.email "$GIT_USER_EMAIL"
-  git config --global init.defaultBranch main
+# === SSH and run remote commands ===
+ssh -i "$SSH_KEY" -p "$REMOTE_PORT" "root@$REMOTE_HOST" bash <<'EOF'
+set -e
 
-  if [ ! -d "mlx" ]; then
+# Upgrade pip properly
+python3 -m pip install --upgrade pip
+
+# Git configuration
+git config --global user.name "$GIT_USER_NAME"
+git config --global user.email "$GIT_USER_EMAIL"
+git config --global init.defaultBranch main
+
+# Clone repo if needed
+cd /root
+if [ ! -d "mlx" ]; then
     git clone https://github.com/anton-dergunov/mlx.git
-  else
-    echo "📁 mlx repo already exists; skipping clone"
-  fi
+fi
 
-  mkdir -p /root/mlx/data
-  echo "✅ Git configured and repo cloned."
+# Setup Python virtual environment
+cd /root/mlx
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Upgrade pip again inside venv
+python -m pip install --upgrade pip
+
+# Install ipykernel to register venv as Jupyter kernel
+pip install ipykernel
+
+# Optional: Preinstall jupyter for interactive use
+pip install notebook jupyterlab
+
+# Register venv with Jupyter
+python -m ipykernel install --user --name=mlx-venv --display-name "Python (mlx-venv)"
+
+echo "✅ Environment setup complete"
 EOF
 
 # === Copy data directory contents to remote ===
