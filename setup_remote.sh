@@ -36,9 +36,6 @@ echo "   user.email = $GIT_USER_EMAIL"
 ssh -i "$SSH_KEY" -p "$REMOTE_PORT" "root@$REMOTE_HOST" bash <<'EOF'
 set -e
 
-# Upgrade pip properly
-python3 -m pip install --upgrade pip
-
 # Git configuration
 git config --global user.name "$GIT_USER_NAME"
 git config --global user.email "$GIT_USER_EMAIL"
@@ -62,7 +59,10 @@ python -m pip install --upgrade pip
 pip install ipykernel
 
 # Optional: Preinstall jupyter for interactive use
-pip install notebook jupyterlab
+pip install notebook jupyterlab ipywidgets
+
+# Upgrade pip
+python -m pip install --upgrade pip
 
 # Register venv with Jupyter
 python -m ipykernel install --user --name=mlx-venv --display-name "Python (mlx-venv)"
@@ -71,7 +71,7 @@ echo "✅ Environment setup complete"
 EOF
 
 # === Copy data directory contents to remote ===
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL_DATA_DIR="$SCRIPT_DIR/data"
 
 if [ ! -d "$LOCAL_DATA_DIR" ]; then
