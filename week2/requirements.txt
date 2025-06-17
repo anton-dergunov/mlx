@@ -1,0 +1,8 @@
+datasets==3.2.0
+gensim==4.3.3
+numpy==1.26.4
+omegaconf==2.3.0
+torch==2.6.0
+torchvision==0.21.0
+tqdm==4.67.1
+wandb==0.20.1

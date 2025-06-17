@@ -1,0 +1,20 @@
+project: "ms-marco-ranking"
+
+dataset:
+  name: "microsoft/ms_marco"
+  version: "v1.1"
+  batch_size: 64
+
+model:
+  type: "avg_w2v_encoder"
+  hidden_dim: 128
+
+train:
+  epochs: 3
+  lr: 0.0001
+  seed: 42
+
+log:
+  wandb: true
+  project: "ms-marco-ranking"
+  run_name: "baseline"

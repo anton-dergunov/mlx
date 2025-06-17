@@ -59,6 +59,8 @@ python src/main.py --config config/base.yaml
 - Instructions for keeping the experiment run results.
 - Where to keep the experiment data?
 - Instructions for notebooks.
+- Add useful utils (such as get_device).
+- Decribe basic (default) and custom config.
 
 ### References
 - [Chat with ChatGPT](https://chatgpt.com/share/68515cef-c980-8002-9b31-e3bbbcde1ea5)
