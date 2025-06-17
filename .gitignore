@@ -5,3 +5,9 @@ hackernews_stories.parquet
 text8
 cbow_final.pt
 wandb
+week1/glove.6B.50d.txt
+week1/glove.6B.100d.txt
+week1/glove.6B.200d.txt
+week1/glove.6B.300d.txt
+week1/glove.6B.zip
+week2/__pycache__/util.cpython-311.pyc
