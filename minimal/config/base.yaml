@@ -1,0 +1,18 @@
+project: "pytorch-experiments"
+run_name: "baseline-cnn"
+dataset:
+  name: "MNIST"
+  batch_size: 64
+  num_workers: 2
+model:
+  type: "simple_cnn"
+  hidden_dim: 128
+train:
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0001
+  seed: 42
+log:
+  wandb: true
+  entity: "your_wandb_username"
+  project: "nn-exp"
