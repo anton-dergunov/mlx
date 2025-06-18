@@ -56,8 +56,8 @@ def extract_eval_data(cfg, split):
     if os.path.exists(processed_data_path):
         print(f"Loading cached tokenized data from: {processed_data_path}")
         with open(processed_data_path, "rb") as f:
-            queries, documents, qrels = pickle.load(f)
-        return queries, documents, qrels
+            queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels = pickle.load(f)
+        return queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels
 
     ds = load_dataset(
         cfg.dataset.name,
@@ -65,14 +65,17 @@ def extract_eval_data(cfg, split):
         cache_dir=cfg.dataset.cache_dir,
         split="validation")
 
-    queries = []
-    documents = []
+    queries_orig = []
+    queries_tokenized = []
+    docs_orig = []
+    docs_tokenized = []
     doc_set = {}
     qrels = []
 
     for query_id, entry in enumerate(tqdm(ds, desc=f"Tokenizing {split} dataset")):
-        query_tokens = tokenize(entry["query"])
-        queries.append(query_tokens)
+        query = entry["query"]
+        queries_orig.append(query)
+        queries_tokenized.append(tokenize(query))
 
         passage_texts = entry["passages"]["passage_text"]
         is_selected = entry["passages"]["is_selected"]
@@ -82,9 +85,10 @@ def extract_eval_data(cfg, split):
             tokenized = tokenize(p_text)
             doc_key = tuple(tokenized)
             if doc_key not in doc_set:
-                doc_id = len(documents)
+                doc_id = len(docs_tokenized)
                 doc_set[doc_key] = doc_id
-                documents.append(tokenized)
+                docs_orig.append(p_text)
+                docs_tokenized.append(tokenized)
             else:
                 doc_id = doc_set[doc_key]
 
@@ -96,9 +100,9 @@ def extract_eval_data(cfg, split):
 
     print(f"Saving tokenized data to: {processed_data_path}")
     with open(processed_data_path, "wb") as f:
-        pickle.dump((queries, documents, qrels), f)
+        pickle.dump((queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels), f)
 
-    return queries, documents, qrels
+    return queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels
 
 
 class BaseTextDataset(Dataset):
@@ -179,10 +183,10 @@ def get_dataloader(cfg, word2idx):
 
 
 def get_evaluation_data(cfg, split, word2idx):
-    queries, documents, qrels = extract_eval_data(cfg, split)
+    queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels = extract_eval_data(cfg, split)
 
-    query_dataset = TextDataset(queries, word2idx)
-    doc_dataset = TextDataset(documents, word2idx)
+    query_dataset = TextDataset(queries_tokenized, word2idx)
+    doc_dataset = TextDataset(docs_tokenized, word2idx)
 
     collate = partial(collate_fn, word2idx[PAD_TOKEN])
     query_loader = DataLoader(
@@ -194,4 +198,4 @@ def get_evaluation_data(cfg, split, word2idx):
         batch_size=cfg.dataset.batch_size,
         collate_fn=collate)
     
-    return query_loader, doc_loader, qrels
+    return query_loader, queries_orig, doc_loader, docs_orig, qrels

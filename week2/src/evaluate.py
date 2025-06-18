@@ -18,7 +18,7 @@ def dcg_at_k(relevance_scores, k=10):
     return sum(rel / np.log2(idx + 2) for idx, rel in enumerate(relevance_scores[:k]))
 
 
-def evaluate(query_loader, doc_loader, qrels, model, device, batch_size=1024):
+def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, device, batch_size=1024):
     query_embeddings = get_embeddings(query_loader, model, device, is_query=True)
     doc_embeddings = get_embeddings(doc_loader, model, device, is_query=False)
 
@@ -36,6 +36,30 @@ def evaluate(query_loader, doc_loader, qrels, model, device, batch_size=1024):
 
     sim_matrix = torch.cat(sim_matrix, dim=0)
 
+    # Select first 3 queries
+    top_k = 10
+    selected_queries = range(3)
+
+    top_results = []
+    for qid in selected_queries:
+        scores = sim_matrix[qid].numpy()
+        ranked = sorted(range(len(scores)), key=lambda i: -scores[i], reverse=True)
+        top_docs = ranked[:top_k]
+        doc_scores = [scores[docid] for docid in top_docs]
+        docs_info = [
+            {
+                "score": float(score),
+                "text": doc_texts[docid]
+            }
+            for docid, score in zip(top_docs, doc_scores)
+        ]
+        top_results.append({
+            "query_text": query_texts[qid],
+            "top_documents": docs_info
+        })
+
+    # FIXME break this into separate functions
+
     mrr = []
     map_scores = []
     precision_at_10 = []
@@ -45,7 +69,7 @@ def evaluate(query_loader, doc_loader, qrels, model, device, batch_size=1024):
     for qid, rels in tqdm(qrels, desc="Computing metrics"):
         scores = sim_matrix[qid].numpy()
         rel_dict = {docid: score for docid, score in rels}
-        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
+        ranked = sorted(range(len(scores)), key=lambda i: -scores[i], reverse=True)
 
         hits = []
         for rank, docid in enumerate(ranked):
@@ -88,4 +112,4 @@ def evaluate(query_loader, doc_loader, qrels, model, device, batch_size=1024):
         "NDCG@10": np.mean(ndcg_at_10),
     }
 
-    return results
+    return results, top_results

@@ -65,9 +65,16 @@ def main(cfg, modes):
         model.to(device)
 
         # TODO Make the split configurable
-        query_loader, doc_loader, qrels = get_evaluation_data(cfg, "validation", word2idx)
+        query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
 
-        results = evaluate(query_loader, doc_loader, qrels, model, device)
+        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, device)
+
+        # TODO Log this into W&B as wells (and make the number of queries and top docs configurable)
+        for result in top_results:
+            print(f"\nQuery: {result['query_text']}")
+            print("Top Documents:")
+            for idx, doc in enumerate(result["top_documents"], 1):
+                print(f"  {idx}. [{doc['score']:.4f}] {doc['text']}")
 
         print("Evaluation Results:")
         for metric, value in results.items():
