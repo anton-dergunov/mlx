@@ -13,6 +13,7 @@ def train_loop(model, dataloader, cfg):
     print(f"Using device: {device}")
     
     model.to(device)
+
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
 
@@ -21,15 +22,18 @@ def train_loop(model, dataloader, cfg):
         epoch_loss = 0.0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
-            q, pos, neg = batch["query"].to(device), batch["pos"].to(device), batch["neg"].to(device)
-            q_emb = model(q)
-            pos_emb = model(pos)
-            neg_emb = model(neg)
+            q = batch["query"].to(device)
+            pos = batch["pos"].to(device)
+            neg = batch["neg"].to(device)
+
+            q_emb, pos_emb, neg_emb = model(q, pos, neg)
 
             loss = triplet_loss(q_emb, pos_emb, neg_emb)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            
             epoch_loss += loss.item()
 
         avg_loss = epoch_loss / len(dataloader)

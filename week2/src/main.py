@@ -8,7 +8,6 @@ from omegaconf import OmegaConf
 from train import train_loop
 from data import get_dataloader
 from model import get_model
-from utils import get_device
 from embeddings import get_pretrained_w2v_embeddings, PAD_TOKEN
 
 
@@ -37,8 +36,11 @@ def main(cfg):
 
     model = get_model(cfg, embedding_matrix, word2idx[PAD_TOKEN])
 
-    print("Starting training...")
-    train_loop(model, train_loader, cfg)
+    if not model.requires_training:
+        print("Skip training")
+    else:
+        print("Starting training...")
+        train_loop(model, train_loader, cfg)
 
     if cfg.log.wandb:
         wandb.finish()
@@ -49,5 +51,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
     args = parser.parse_args()
+    # TODO Load custom and base (default) configs
     cfg = OmegaConf.load(args.config)
     main(cfg)

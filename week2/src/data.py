@@ -118,6 +118,7 @@ def get_dataloader(cfg, word2idx):
 
     dataset = TripletDataset(queries, passages, word2idx)
 
+    # TODO Introduce custom bucketed sampler for triplets for effective padding
     collate = partial(triplet_collate_fn, word2idx[PAD_TOKEN])
     return DataLoader(
         dataset,

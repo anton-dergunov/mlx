@@ -11,6 +11,7 @@ def get_pretrained_w2v_embeddings(cfg):
     # TODO Download the data from https://code.google.com/archive/p/word2vec/ or other paths
     path = os.path.expanduser(cfg.embeddings.path)
     w2v = KeyedVectors.load_word2vec_format(path, binary=cfg.embeddings.is_binary)
+    # FIXME Ability to load glove embeddings without convertion. Use binary for them? Then remove convert_globe_emb.py
 
     # Get embedding dimensions and vocab size
     vector_size = w2v.vector_size
