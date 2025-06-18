@@ -4,6 +4,12 @@ dataset:
   name: "microsoft/ms_marco"
   version: "v1.1"
   batch_size: 64
+  cache_dir: "/Users/anton/experiment_data/datasets/ms_marco"
+
+embeddings:
+  path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
+  is_binary: false
+  # path: "~/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
 
 model:
   type: "avg_w2v_encoder"
@@ -15,6 +21,6 @@ train:
   seed: 42
 
 log:
-  wandb: true
+  wandb: false
   project: "ms-marco-ranking"
   run_name: "baseline"

@@ -1,41 +1,27 @@
 import torch.nn as nn
 import torch
-from gensim.models import KeyedVectors
 import numpy as np
 import re
 
 
-class AvgW2VEncoder(nn.Module):
-    def __init__(self, w2v_model, hidden_dim=128, device="cpu"):
+class AvgW2VEncoder(torch.nn.Module):
+    def __init__(self, pad_token_idx, embedding_weights, projection_dim=128, freeze_embeddings=True):
         super().__init__()
-        self.w2v = w2v_model
-        self.embedding_dim = w2v_model.vector_size
-        self.proj = nn.Linear(self.embedding_dim, hidden_dim)
-        self.norm = nn.LayerNorm(hidden_dim)
-        self.device = device
+        self.pad_token_idx = pad_token_idx
+        self.embedding = nn.Embedding.from_pretrained(embedding_weights, freeze=freeze_embeddings, padding_idx=pad_token_idx)  # TODO Why pass padding_idx here?
+        self.projection = nn.Linear(embedding_weights.size(1), projection_dim)
 
-    def forward(self, texts):
-        embs = []
-        for text in texts:
-            words = re.findall(r'\b\w+\b', text.lower())
-            vecs = [self.w2v[w] for w in words if w in self.w2v]
-            if len(vecs)==0:
-                vec = torch.zeros(self.embedding_dim, device=self.device)
-            else:
-                vec = torch.from_numpy(np.array(vecs)).to(self.device).mean(dim=0)
-            embs.append(vec)
-        embs = torch.stack(embs)  # (B, E)
-        out = self.norm(self.proj(embs))  # (B, H)
-        return out
+    def forward(self, x):
+        emb = self.embedding(x)              # (batch, seq_len, emb_dim)
+        mask = x != self.pad_token_idx       # (batch, seq_len)
+        emb_sum = (emb * mask.unsqueeze(-1)).sum(dim=1)    # TODO Understand this code
+        length = mask.sum(dim=1).clamp(min=1).unsqueeze(1)
+        emb_avg = emb_sum / length
+        return self.projection(emb_avg)
 
 
-def get_model(cfg, device):
-    # Download the data from https://code.google.com/archive/p/word2vec/
-    # TODO Replace with configurable path
-    print("Loading pretrained word2vec model...")
-    w2v = KeyedVectors.load_word2vec_format("~/experiment_data/datasets/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin", binary=True)
-
+def get_model(cfg, embedding_weights, pad_token_idx):
     if cfg.model.type == "avg_w2v_encoder":
-        return AvgW2VEncoder(w2v_model=w2v, hidden_dim=cfg.model.hidden_dim, device=device).to(device)
+        return AvgW2VEncoder(pad_token_idx, embedding_weights, cfg.model.hidden_dim)
 
     raise ValueError(f"Unknown model type: {cfg.model.type}")

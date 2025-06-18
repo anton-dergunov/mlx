@@ -21,7 +21,7 @@ def train_loop(model, dataloader, cfg):
         epoch_loss = 0.0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
-            q, pos, neg = batch["query"], batch["pos"], batch["neg"]
+            q, pos, neg = batch["query"].to(device), batch["pos"].to(device), batch["neg"].to(device)
             q_emb = model(q)
             pos_emb = model(pos)
             neg_emb = model(neg)

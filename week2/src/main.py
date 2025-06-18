@@ -9,6 +9,7 @@ from train import train_loop
 from data import get_dataloader
 from model import get_model
 from utils import get_device
+from embeddings import get_pretrained_w2v_embeddings, PAD_TOKEN
 
 
 def seed_all(seed):
@@ -27,12 +28,15 @@ def main(cfg):
             project=cfg.log.project,
             name=cfg.log.run_name,
             config=OmegaConf.to_container(cfg, resolve=True))
+        
+    print("Loading pretrained word2vec model...")
+    embedding_matrix, word2idx = get_pretrained_w2v_embeddings(cfg)
 
     print("Loading dataset...")
-    train_loader = get_dataloader(cfg)
+    train_loader = get_dataloader(cfg, word2idx)
 
-    device = get_device()  # FIXME: Remove this
-    model = get_model(cfg, device)
+    model = get_model(cfg, embedding_matrix, word2idx[PAD_TOKEN])
+
     print("Starting training...")
     train_loop(model, train_loader, cfg)
 
