@@ -32,8 +32,7 @@ def get_pretrained_w2v_embeddings(cfg):
     unk_idx = len(word2idx)
     word2idx[UNK_TOKEN] = unk_idx
 
-    vocab_size = len(word2idx)
-    print(f"Total vocab size (with PAD and UNK): {vocab_size}")
+    vocab_size = len(word2idx)  # Update to include PAD and UNK tokens
 
     # Initialize embedding matrix
     embedding_matrix = torch.zeros(vocab_size, vector_size)

@@ -36,7 +36,7 @@ def load_or_tokenize_dataset(cfg):
     all_queries = []
     all_passages = []
 
-    for entry in tqdm(ds):
+    for entry in tqdm(ds, desc="Tokenizing train dataset"):
         query_tokens = tokenize(entry["query"])
         all_queries.append(query_tokens)
 
@@ -70,7 +70,7 @@ def extract_eval_data(cfg, split):
     doc_set = {}
     qrels = []
 
-    for query_id, entry in enumerate(tqdm(ds)):
+    for query_id, entry in enumerate(tqdm(ds, desc=f"Tokenizing {split} dataset")):
         query_tokens = tokenize(entry["query"])
         queries.append(query_tokens)
 
