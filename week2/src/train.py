@@ -5,13 +5,8 @@ from torch import optim
 from tqdm import tqdm
 import wandb
 
-from utils import get_device
 
-
-def train_loop(model, dataloader, cfg):
-    device = get_device()
-    print(f"Using device: {device}")
-    
+def train_loop(model, dataloader, cfg, device):
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)

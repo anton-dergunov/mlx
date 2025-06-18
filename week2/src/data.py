@@ -16,8 +16,9 @@ def tokenize(text):
     return re.findall(r'\b\w+\b', text.lower())
 
 
+# FIXME rename to say that it is for train
 def load_or_tokenize_dataset(cfg):
-    processed_data_path = os.path.join(cfg.dataset.cache_dir, "cache.plk")
+    processed_data_path = os.path.join(cfg.dataset.cache_dir, "train.plk")
 
     if os.path.exists(processed_data_path):
         print(f"Loading cached tokenized data from: {processed_data_path}")
@@ -49,34 +50,83 @@ def load_or_tokenize_dataset(cfg):
     return all_queries, all_passages
 
 
-class TripletDataset(Dataset):
-    def __init__(self, triplets, word2idx):
-        self.triplets = triplets
-        self.word2idx = word2idx
-        self.pad_idx = word2idx["<PAD>"]
-        self.unk_idx = word2idx["<UNK>"]
+def extract_eval_data(cfg, split):
+    processed_data_path = os.path.join(cfg.dataset.cache_dir, f"{split}.pkl")
 
-    def encode(self, words):
-        return [self.word2idx.get(w, self.unk_idx) for w in words]
+    if os.path.exists(processed_data_path):
+        print(f"Loading cached tokenized data from: {processed_data_path}")
+        with open(processed_data_path, "rb") as f:
+            queries, documents, qrels = pickle.load(f)
+        return queries, documents, qrels
 
-    def __getitem__(self, idx):
-        q, p, n = self.triplets[idx]
-        return {
-            "query": self.encode(q),
-            "pos": self.encode(p),
-            "neg": self.encode(n)
-        }
+    ds = load_dataset(
+        cfg.dataset.name,
+        cfg.dataset.version,
+        cache_dir=cfg.dataset.cache_dir,
+        split="validation")
 
-    def __len__(self):
-        return len(self.triplets)
+    queries = []
+    documents = []
+    doc_set = {}
+    qrels = []
+
+    for query_id, entry in enumerate(tqdm(ds)):
+        query_tokens = tokenize(entry["query"])
+        queries.append(query_tokens)
+
+        passage_texts = entry["passages"]["passage_text"]
+        is_selected = entry["passages"]["is_selected"]
+
+        relevant_docs = []
+        for i, (p_text, selected) in enumerate(zip(passage_texts, is_selected)):
+            tokenized = tokenize(p_text)
+            doc_key = tuple(tokenized)
+            if doc_key not in doc_set:
+                doc_id = len(documents)
+                doc_set[doc_key] = doc_id
+                documents.append(tokenized)
+            else:
+                doc_id = doc_set[doc_key]
+
+            if selected:
+                relevant_docs.append((doc_id, 2 if len(relevant_docs) == 0 else 1))
+
+        if relevant_docs:
+            qrels.append((query_id, relevant_docs))
+
+    print(f"Saving tokenized data to: {processed_data_path}")
+    with open(processed_data_path, "wb") as f:
+        pickle.dump((queries, documents, qrels), f)
+
+    return queries, documents, qrels
 
 
-class TripletDataset(Dataset):
-    def __init__(self, queries, passages, word2idx):
-        self.queries = queries
-        self.passages = passages
+class BaseTextDataset(Dataset):
+    def __init__(self, word2idx):
         self.word2idx = word2idx
         self.unk_idx = word2idx[UNK_TOKEN]
+
+    def _encode(self, words):
+        return [self.word2idx.get(w, self.unk_idx) for w in words]
+
+
+class TextDataset(BaseTextDataset):
+    def __init__(self, texts, word2idx):
+        super().__init__(word2idx)
+        self.texts = texts
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        return self._encode(self.texts[idx])
+
+
+class TripletDataset(BaseTextDataset):
+    def __init__(self, queries, passages, word2idx):
+        super().__init__(word2idx)
+        self.queries = queries
+        self.passages = passages
 
     def __len__(self):
         return len(self.passages)
@@ -97,14 +147,14 @@ class TripletDataset(Dataset):
             "neg": self._encode(neg_passage)
         }
 
-    def _encode(self, words):
-        return [self.word2idx.get(w, self.unk_idx) for w in words]
+
+def collate_fn(pad_idx, batch):
+    return pad_sequence([torch.tensor(x) for x in batch], batch_first=True, padding_value=pad_idx)
 
 
 def triplet_collate_fn(padding_value, batch):
     def pad(field_name):
-        batch_field = [torch.tensor(sample[field_name]) for sample in batch]
-        return pad_sequence(batch_field, batch_first=True, padding_value=padding_value)
+        return collate_fn(padding_value, [sample[field_name] for sample in batch])
 
     return {
         "query": pad("query"),
@@ -113,6 +163,7 @@ def triplet_collate_fn(padding_value, batch):
     }
 
 
+# FIXME rename to say that it is for train
 def get_dataloader(cfg, word2idx):
     queries, passages = load_or_tokenize_dataset(cfg)
 
@@ -125,3 +176,22 @@ def get_dataloader(cfg, word2idx):
         batch_size=cfg.dataset.batch_size,
         shuffle=True,
         collate_fn=collate)
+
+
+def get_evaluation_data(cfg, split, word2idx):
+    queries, documents, qrels = extract_eval_data(cfg, split)
+
+    query_dataset = TextDataset(queries, word2idx)
+    doc_dataset = TextDataset(documents, word2idx)
+
+    collate = partial(collate_fn, word2idx[PAD_TOKEN])
+    query_loader = DataLoader(
+        query_dataset,
+        batch_size=cfg.dataset.batch_size,
+        collate_fn=collate)
+    doc_loader = DataLoader(
+        doc_dataset,
+        batch_size=cfg.dataset.batch_size,
+        collate_fn=collate)
+    
+    return query_loader, doc_loader, qrels

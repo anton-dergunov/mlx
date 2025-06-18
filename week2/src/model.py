@@ -78,5 +78,6 @@ def get_model(cfg, embedding_weights, pad_token_idx):
         return AvgW2VEncoder(pad_token_idx, embedding_weights, cfg.model.hidden_dim)
     elif model_type == "avg_w2v_encoder_noproj":
         return AvgW2VEncoderNoProj(pad_token_idx, embedding_weights)
+    # TODO Also introduce a model that shares the weights for doc and query to test it
 
     raise ValueError(f"Unknown model type: {model_type}")
