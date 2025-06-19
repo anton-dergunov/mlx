@@ -1,6 +1,8 @@
 import torch
 from tqdm import tqdm
 import numpy as np
+import cProfile
+import pstats
 
 
 def get_embeddings(dataloader, model, device, is_query):
@@ -14,8 +16,94 @@ def get_embeddings(dataloader, model, device, is_query):
     return torch.cat(embeddings, dim=0)
 
 
-def dcg_at_k(relevance_scores, k=10):
-    return sum(rel / np.log2(idx + 2) for idx, rel in enumerate(relevance_scores[:k]))
+def compute_mrr(hits):
+    if not hits:
+        return 0.0
+    return 1.0 / hits[0][0]
+
+
+def compute_map(hits):
+    if not hits:
+        return 0.0
+    ap = 0.0
+    num_hits = 0
+    for i, (rank, _) in enumerate(hits):
+        num_hits += 1
+        ap += num_hits / rank
+    return ap / len(hits)
+
+
+def compute_precision_at_k(top_k_labels):
+    return np.sum(top_k_labels) / len(top_k_labels)
+
+
+def compute_recall_at_k(top_k_labels, total_relevant):
+    return np.sum(top_k_labels) / total_relevant if total_relevant > 0 else 0.0
+
+
+def compute_ndcg_at_k(gains, ideal_gains, k=10):
+    dcg = sum(g / np.log2(i + 2) for i, g in enumerate(gains[:k]))
+    idcg = sum(g / np.log2(i + 2) for i, g in enumerate(ideal_gains[:k]))
+    return dcg / idcg if idcg > 0 else 0.0
+
+
+def compute_metrics(sim_matrix, qrels, k=10):
+    mrr = []
+    map_scores = []
+    precision_at_k = []
+    recall_at_k = []
+    ndcg_at_k = []
+
+    for qid, rels in tqdm(qrels, desc="Computing metrics"):
+        scores = sim_matrix[qid].numpy()
+        rel_dict = {docid: score for docid, score in rels}
+        ranked = np.argsort(-scores)
+        hits = [(rank + 1, rel_dict[docid]) for rank, docid in enumerate(ranked) if docid in rel_dict]
+
+        mrr.append(compute_mrr(hits))
+        map_scores.append(compute_map(hits))
+
+        top_k = ranked[:k]
+        top_k_labels = [1 if docid in rel_dict else 0 for docid in top_k]
+        precision_at_k.append(compute_precision_at_k(top_k_labels))
+        recall_at_k.append(compute_recall_at_k(top_k_labels, len(rel_dict)))
+
+        gains = [rel_dict.get(docid, 0) for docid in top_k]
+        ideal_gains = sorted(rel_dict.values(), reverse=True)
+        ndcg_at_k.append(compute_ndcg_at_k(gains, ideal_gains, k))
+
+    return {
+        "MRR": np.mean(mrr),
+        "MAP": np.mean(map_scores),
+        f"Precision@{k}": np.mean(precision_at_k),
+        f"Recall@{k}": np.mean(recall_at_k),
+        f"NDCG@{k}": np.mean(ndcg_at_k),
+    }
+
+
+def get_top_results(sim_matrix, query_texts, doc_texts, k=10):
+    selected_queries = range(3)  # TODO Make this configurable
+
+    top_results = []
+
+    for qid in selected_queries:
+        scores = sim_matrix[qid].numpy()
+        ranked = np.argsort(-scores)
+        top_docs = ranked[:k]
+        doc_scores = [scores[docid] for docid in top_docs]
+        docs_info = [
+            {
+                "score": float(score),
+                "text": doc_texts[docid]
+            }
+            for docid, score in zip(top_docs, doc_scores)
+        ]
+        top_results.append({
+            "query_text": query_texts[qid],
+            "top_documents": docs_info
+        })
+
+    return top_results
 
 
 def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, device, batch_size=1024):
@@ -36,80 +124,7 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, dev
 
     sim_matrix = torch.cat(sim_matrix, dim=0)
 
-    # Select first 3 queries
-    top_k = 10
-    selected_queries = range(3)
-
-    top_results = []
-    for qid in selected_queries:
-        scores = sim_matrix[qid].numpy()
-        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
-        top_docs = ranked[:top_k]
-        doc_scores = [scores[docid] for docid in top_docs]
-        docs_info = [
-            {
-                "score": float(score),
-                "text": doc_texts[docid]
-            }
-            for docid, score in zip(top_docs, doc_scores)
-        ]
-        top_results.append({
-            "query_text": query_texts[qid],
-            "top_documents": docs_info
-        })
-
-    # FIXME break this into separate functions
-
-    mrr = []
-    map_scores = []
-    precision_at_10 = []
-    recall_at_10 = []
-    ndcg_at_10 = []
-
-    for qid, rels in tqdm(qrels, desc="Computing metrics"):
-        scores = sim_matrix[qid].numpy()
-        rel_dict = {docid: score for docid, score in rels}
-        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
-
-        hits = []
-        for rank, docid in enumerate(ranked):
-            if docid in rel_dict:
-                hits.append((rank + 1, rel_dict[docid]))
-
-        # MRR
-        if hits:
-            rank_positions = [r for r, _ in hits]
-            mrr.append(1.0 / rank_positions[0])
-
-        # MAP
-        ap = 0.0
-        num_hits = 0
-        for i, (rank, _) in enumerate(hits):
-            num_hits += 1
-            ap += num_hits / rank
-        if hits:
-            map_scores.append(ap / len(hits))
-
-        # Precision@10 and Recall@10
-        top10 = ranked[:10]
-        rels_at_10 = [1 if docid in rel_dict else 0 for docid in top10]
-        precision_at_10.append(np.sum(rels_at_10) / 10)
-        if rel_dict:
-            recall_at_10.append(np.sum(rels_at_10) / len(rel_dict))
-
-        # NDCG@10
-        gains = [rel_dict.get(docid, 0) for docid in top10]
-        ideal_gains = sorted([v for v in rel_dict.values()], reverse=True)
-        dcg = dcg_at_k(gains, k=10)
-        idcg = dcg_at_k(ideal_gains, k=10)
-        ndcg_at_10.append(dcg / idcg if idcg > 0 else 0.0)
-
-    results = {
-        "MRR": np.mean(mrr),
-        "MAP": np.mean(map_scores),
-        "Precision@10": np.mean(precision_at_10),
-        "Recall@10": np.mean(recall_at_10),
-        "NDCG@10": np.mean(ndcg_at_10),
-    }
+    top_results = get_top_results(sim_matrix, query_texts, doc_texts, k=10)
+    results = compute_metrics(sim_matrix, qrels, k=10)
 
     return results, top_results

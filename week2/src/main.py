@@ -76,7 +76,7 @@ def main(cfg, modes):
             for idx, doc in enumerate(result["top_documents"], 1):
                 print(f"  {idx}. [{doc['score']:.4f}] {doc['text']}")
 
-        print("Evaluation Results:")
+        print("\nEvaluation Results:")
         for metric, value in results.items():
             print(f"{metric}: {value:.4f}")
 
