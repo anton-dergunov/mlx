@@ -92,8 +92,7 @@ def extract_eval_data(cfg, split):
             else:
                 doc_id = doc_set[doc_key]
 
-            if selected:
-                relevant_docs.append((doc_id, 2 if len(relevant_docs) == 0 else 1))
+            relevant_docs.append((doc_id, 2 if selected else 1))
 
         if relevant_docs:
             qrels.append((query_id, relevant_docs))
