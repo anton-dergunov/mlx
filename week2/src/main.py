@@ -69,12 +69,12 @@ def main(cfg, modes):
 
         results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, device)
 
-        # TODO Log this into W&B as wells (and make the number of queries and top docs configurable)
+        # TODO Log this into W&B as well (and make the number of queries and top docs configurable)
         for result in top_results:
             print(f"\nQuery: {result['query_text']}")
             print("Top Documents:")
             for idx, doc in enumerate(result["top_documents"], 1):
-                print(f"  {idx}. [{doc['score']:.4f}] {doc['text']}")
+                print(f"  {idx:2d}. [{doc['score']:.4f}] <{doc['rel_label']}> {doc['text']}")
 
         print("\nEvaluation Results:")
         for metric, value in results.items():

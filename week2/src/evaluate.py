@@ -81,22 +81,24 @@ def compute_metrics(sim_matrix, qrels, k=10):
     }
 
 
-def get_top_results(sim_matrix, query_texts, doc_texts, k=10):
+def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
     selected_queries = range(3)  # TODO Make this configurable
 
     top_results = []
 
-    for qid in selected_queries:
+    for qid, rels in qrels[:3]:
         scores = sim_matrix[qid].numpy()
         ranked = np.argsort(-scores)
         top_docs = ranked[:k]
         doc_scores = [scores[docid] for docid in top_docs]
+        doc_rels = [next((rel for doc, rel in rels if doc == docid), 0) for docid in top_docs]
         docs_info = [
             {
                 "score": float(score),
+                "rel_label": rel_label,
                 "text": doc_texts[docid]
             }
-            for docid, score in zip(top_docs, doc_scores)
+            for docid, score, rel_label in zip(top_docs, doc_scores, doc_rels)
         ]
         top_results.append({
             "query_text": query_texts[qid],

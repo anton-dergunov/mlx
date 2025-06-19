@@ -10,6 +10,7 @@ def train_loop(model, dataloader, cfg, device):
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)
+    # TODO Implement loss from scratch to try using cosine similarity
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
 
     for epoch in range(cfg.train.epochs):
