@@ -43,7 +43,7 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, dev
     top_results = []
     for qid in selected_queries:
         scores = sim_matrix[qid].numpy()
-        ranked = sorted(range(len(scores)), key=lambda i: -scores[i], reverse=True)
+        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
         top_docs = ranked[:top_k]
         doc_scores = [scores[docid] for docid in top_docs]
         docs_info = [
@@ -69,7 +69,7 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, dev
     for qid, rels in tqdm(qrels, desc="Computing metrics"):
         scores = sim_matrix[qid].numpy()
         rel_dict = {docid: score for docid, score in rels}
-        ranked = sorted(range(len(scores)), key=lambda i: -scores[i], reverse=True)
+        ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
 
         hits = []
         for rank, docid in enumerate(ranked):
