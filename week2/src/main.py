@@ -21,6 +21,8 @@ def seed_all(seed):
 
 
 def main(cfg, modes):
+    seed_all(cfg.train.seed)
+
     device = get_device()
     print(f"Using device: {device}")
     
@@ -34,8 +36,6 @@ def main(cfg, modes):
     document_model = get_model(cfg.document_model, shared_embedding, pad_token_idx)
 
     if "train" in modes:
-        seed_all(cfg.train.seed)
-
         if cfg.log.wandb:
             wandb.init(
                 project=cfg.log.project,
@@ -63,12 +63,11 @@ def main(cfg, modes):
             wandb.finish()
 
     if "test" in modes:
-        if not query_model or not document_model:
-            query_model.load_state_dict(torch.load(cfg.query_model.output, map_location="cpu"))
-            print(f"Query model restored from {cfg.query_model.output}")
+        query_model.load_state_dict(torch.load(cfg.query_model.output, map_location=device))
+        print(f"Query model restored from {cfg.query_model.output}")
 
-            document_model.load_state_dict(torch.load(cfg.document_model.output, map_location="cpu"))
-            print(f"Document model restored from {cfg.document_model.output}")
+        document_model.load_state_dict(torch.load(cfg.document_model.output, map_location=device))
+        print(f"Document model restored from {cfg.document_model.output}")
 
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
