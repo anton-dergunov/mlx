@@ -51,11 +51,13 @@ def main(cfg, modes):
             print("Starting training...")
             train_loop(query_model, document_model, train_loader, cfg, device)
         
-        torch.save(query_model.state_dict(), cfg.query_model.output)
-        print(f"Query model saved to {cfg.query_model.output}")
+        if query_model.requires_training:
+            torch.save(query_model.state_dict(), cfg.query_model.output)
+            print(f"Query model saved to {cfg.query_model.output}")
 
-        torch.save(document_model.state_dict(), cfg.document_model.output)
-        print(f"Query model saved to {cfg.query_model.output}")
+        if document_model.requires_training:
+            torch.save(document_model.state_dict(), cfg.document_model.output)
+            print(f"Document model saved to {cfg.document_model.output}")
 
         # TODO Upload the models to W&B
 
@@ -63,11 +65,13 @@ def main(cfg, modes):
             wandb.finish()
 
     if "test" in modes:
-        query_model.load_state_dict(torch.load(cfg.query_model.output, map_location=device))
-        print(f"Query model restored from {cfg.query_model.output}")
+        if query_model.requires_training:
+            query_model.load_state_dict(torch.load(cfg.query_model.output, map_location=device))
+            print(f"Query model restored from {cfg.query_model.output}")
 
-        document_model.load_state_dict(torch.load(cfg.document_model.output, map_location=device))
-        print(f"Document model restored from {cfg.document_model.output}")
+        if document_model.requires_training:
+            document_model.load_state_dict(torch.load(cfg.document_model.output, map_location=device))
+            print(f"Document model restored from {cfg.document_model.output}")
 
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)

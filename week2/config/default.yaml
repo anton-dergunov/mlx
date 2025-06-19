@@ -1,13 +1,16 @@
 project: "ms-marco-ranking"
 
 dataset:
+  # MS Marco: https://huggingface.co/datasets/microsoft/ms_marco
   name: "microsoft/ms_marco"
   version: "v1.1"
   batch_size: 64
   cache_dir: "/Users/anton/experiment_data/datasets/ms_marco"
 
 embeddings:
+  # GoogleNews word2vec: https://code.google.com/archive/p/word2vec/
   # path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
+  # TODO: Where to get Glove embeddings?
   path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
   is_binary: false
 
