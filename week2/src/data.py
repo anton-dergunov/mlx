@@ -18,7 +18,7 @@ def tokenize(text):
 
 # FIXME rename to say that it is for train
 def load_or_tokenize_dataset(cfg):
-    processed_data_path = os.path.join(cfg.dataset.cache_dir, "train.plk")
+    processed_data_path = os.path.join(cfg.dataset.cache_dir, "train.pkl")
 
     if os.path.exists(processed_data_path):
         print(f"Loading cached tokenized data from: {processed_data_path}")
