@@ -6,15 +6,31 @@ from tqdm import tqdm
 import wandb
 
 
-def train_loop(model, dataloader, cfg, device):
-    model.to(device)
+def get_unique_params(*models):
+    seen = set()
+    unique_params = []
+    for model in models:
+        for param in model.parameters():
+            if id(param) not in seen:
+                unique_params.append(param)
+                seen.add(id(param))
+    return unique_params
 
-    optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)
+
+def train_loop(query_model, document_model, dataloader, cfg, device):
+    query_model.to(device)
+    document_model.to(device)
+
+    optimizer = torch.optim.Adam(
+        get_unique_params(query_model, document_model),
+        lr=cfg.train.lr
+    )
     # TODO Implement loss from scratch to try using cosine similarity
     triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
 
     for epoch in range(cfg.train.epochs):
-        model.train()
+        query_model.train()
+        document_model.train()
         epoch_loss = 0.0
 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}"):
@@ -22,7 +38,9 @@ def train_loop(model, dataloader, cfg, device):
             pos = batch["pos"].to(device)
             neg = batch["neg"].to(device)
 
-            q_emb, pos_emb, neg_emb = model(q, pos, neg)
+            q_emb = query_model(q)
+            pos_emb = document_model(pos)
+            neg_emb = document_model(neg)
 
             loss = triplet_loss(q_emb, pos_emb, neg_emb)
 

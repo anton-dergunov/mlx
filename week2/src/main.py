@@ -1,4 +1,3 @@
-import os
 import torch
 import wandb
 import random
@@ -7,7 +6,7 @@ from omegaconf import OmegaConf
 
 from embeddings import get_pretrained_w2v_embeddings, PAD_TOKEN
 from data import get_dataloader, get_evaluation_data
-from model import get_model
+from model import get_model, create_shared_embedding
 from train import train_loop
 from evaluate import evaluate
 from utils import get_device
@@ -28,7 +27,11 @@ def main(cfg, modes):
     print("Loading pretrained word2vec model...")
     embedding_matrix, word2idx = get_pretrained_w2v_embeddings(cfg)
 
-    model = get_model(cfg, embedding_matrix, word2idx[PAD_TOKEN])
+    pad_token_idx = word2idx[PAD_TOKEN]
+    shared_embedding = create_shared_embedding(embedding_matrix, pad_token_idx, freeze=True)
+
+    query_model = get_model(cfg.query_model, shared_embedding, pad_token_idx)
+    document_model = get_model(cfg.document_model, shared_embedding, pad_token_idx)
 
     if "train" in modes:
         seed_all(cfg.train.seed)
@@ -42,32 +45,35 @@ def main(cfg, modes):
         print("Loading dataset...")
         train_loader = get_dataloader(cfg, word2idx)
 
-        if not model.requires_training:
+        if not query_model.requires_training and not document_model.requires_training:
             print("Skip training")
         else:
             print("Starting training...")
-            train_loop(model, train_loader, cfg, device)
+            train_loop(query_model, document_model, train_loader, cfg, device)
         
-        torch.save(model.state_dict(), cfg.train.output)
-        print(f"Model saved to {cfg.train.output}")
+        torch.save(query_model.state_dict(), cfg.query_model.output)
+        print(f"Query model saved to {cfg.query_model.output}")
 
-        # TODO Upload the model to W&B
+        torch.save(document_model.state_dict(), cfg.document_model.output)
+        print(f"Query model saved to {cfg.query_model.output}")
+
+        # TODO Upload the models to W&B
 
         if cfg.log.wandb:
             wandb.finish()
 
     if "test" in modes:
-        if not model:
-            model.load_state_dict(torch.load(cfg.train.output, map_location="cpu"))
-            model.eval()
-            print(f"Model restored from {cfg.train.output}")
+        if not query_model or not document_model:
+            query_model.load_state_dict(torch.load(cfg.query_model.output, map_location="cpu"))
+            print(f"Query model restored from {cfg.query_model.output}")
 
-        model.to(device)
+            document_model.load_state_dict(torch.load(cfg.document_model.output, map_location="cpu"))
+            print(f"Document model restored from {cfg.document_model.output}")
 
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
 
-        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, device)
+        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, query_model, document_model, device)
 
         # TODO Log this into W&B as well (and make the number of queries and top docs configurable)
         for result in top_results:

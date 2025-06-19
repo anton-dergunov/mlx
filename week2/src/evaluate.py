@@ -1,17 +1,15 @@
 import torch
 from tqdm import tqdm
 import numpy as np
-import cProfile
-import pstats
 
 
-def get_embeddings(dataloader, model, device, is_query):
+def get_embeddings(dataloader, model, device):
     model.eval()
     embeddings = []
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Encoding " + ("queries" if is_query else "documents")):
+        for batch in tqdm(dataloader, desc="Encoding queries/documents"):
             batch = batch.to(device)
-            emb = model.encode_query(batch) if is_query else model.encode_doc(batch)
+            emb = model(batch)
             embeddings.append(emb.cpu())
     return torch.cat(embeddings, dim=0)
 
@@ -82,11 +80,9 @@ def compute_metrics(sim_matrix, qrels, k=10):
 
 
 def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
-    selected_queries = range(3)  # TODO Make this configurable
-
     top_results = []
 
-    for qid, rels in qrels[:3]:
+    for qid, rels in qrels[:3]:  # TODO Make this configurable
         scores = sim_matrix[qid].numpy()
         ranked = np.argsort(-scores)
         top_docs = ranked[:k]
@@ -108,9 +104,12 @@ def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
     return top_results
 
 
-def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, device, batch_size=1024):
-    query_embeddings = get_embeddings(query_loader, model, device, is_query=True)
-    doc_embeddings = get_embeddings(doc_loader, model, device, is_query=False)
+def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_model, document_model, device, batch_size=1024):
+    query_model.to(device)
+    document_model.to(device)
+
+    query_embeddings = get_embeddings(query_loader, query_model, device)
+    doc_embeddings = get_embeddings(doc_loader, document_model, device)
 
     query_embeddings = query_embeddings.to(device)
     doc_embeddings = doc_embeddings.to(device)
@@ -126,7 +125,7 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, dev
 
     sim_matrix = torch.cat(sim_matrix, dim=0)
 
-    top_results = get_top_results(sim_matrix, query_texts, doc_texts, k=10)
+    top_results = get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10)
     results = compute_metrics(sim_matrix, qrels, k=10)
 
     return results, top_results

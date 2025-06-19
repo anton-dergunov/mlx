@@ -7,22 +7,28 @@ dataset:
   cache_dir: "/Users/anton/experiment_data/datasets/ms_marco"
 
 embeddings:
-  # path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
-  path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
-  is_binary: true
+  # path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
+  path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
+  is_binary: false
 
-model:
+query_model:
   type: "avg_w2v_encoder"
   hidden_dims: [200, 100]
+  # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_query.pt"
+  output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+
+document_model:
+  type: "avg_w2v_encoder"
+  hidden_dims: [200, 100]
+  # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_doc.pt"
+  output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
 
 train:
   epochs: 3
   lr: 0.001
   seed: 42
-  # output: "/Users/anton/mlx/src/week2/models/glove_avg_proj.pt"
-  output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj.pt"
 
 log:
-  wandb: true
+  wandb: false
   project: "ms-marco-ranking"
   run_name: "googlenews_avg_proj"
