@@ -135,16 +135,18 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg
         sim_matrix = []
         for q_idx, query in enumerate(tqdm(all_query_tokens, desc="Cross-encoding query-document pairs")):
             sims = []
-            query = query.unsqueeze(0).to(device)  # shape (1, T)
+            query_tensor = torch.tensor(query).unsqueeze(0).to(device)  # shape (1, T)
+            
             for doc_start in range(0, len(all_doc_tokens), batch_size):
                 doc_batch = all_doc_tokens[doc_start:doc_start + batch_size]
-                doc_batch = torch.stack(doc_batch).to(device)  # shape (B, T)
-                query_batch = query.expand(doc_batch.size(0), -1)  # repeat query B times
+                doc_batch = torch.stack([torch.tensor(doc) for doc in doc_batch]).to(device)  # shape (B, T)
+                query_batch = query_tensor.expand(doc_batch.size(0), -1)  # repeat query B times
 
                 with torch.no_grad():
                     logits = model(query_batch, doc_batch).squeeze(-1)  # shape (B,)
                     scores = torch.sigmoid(logits)  # normalize to [0, 1]
                 sims.append(scores.cpu())
+            
             sims = torch.cat(sims)
             sim_matrix.append(sims.unsqueeze(0))  # shape (1, num_docs)
 
