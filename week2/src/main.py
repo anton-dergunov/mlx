@@ -68,7 +68,7 @@ def main(cfg, modes):
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
 
-        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, cfg, device)
+        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, cfg, device, pad_token_idx)
 
         for result in top_results:
             print(f"\nQuery: {result['query_text']}")
