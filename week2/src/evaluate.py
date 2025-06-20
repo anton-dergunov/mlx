@@ -5,13 +5,12 @@ from tqdm import tqdm
 import wandb
 
 
-def get_embeddings(dataloader, model, device):
-    model.eval()
+def get_embeddings(dataloader, encode_fn, device):
     embeddings = []
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Encoding queries/documents"):
             batch = batch.to(device)
-            emb = model(batch)
+            emb = encode_fn(batch)
             embeddings.append(emb.cpu())
     return torch.cat(embeddings, dim=0)
 
@@ -106,35 +105,63 @@ def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
     return top_results
 
 
-def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_model, document_model, cfg, device, batch_size=1024):
-    query_model.to(device)
-    document_model.to(device)
+def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg, device, batch_size=1024):
+    model.to(device)
+    model.eval()
 
-    query_embeddings = get_embeddings(query_loader, query_model, device)
-    doc_embeddings = get_embeddings(doc_loader, document_model, device)
+    if cfg.model.type == "dual_encoder":
+        # Get precomputed embeddings
+        query_embeddings = get_embeddings(query_loader, model.encode_query, device)
+        doc_embeddings = get_embeddings(doc_loader, model.encode_document, device)
 
-    query_embeddings = query_embeddings.to(device)
-    doc_embeddings = doc_embeddings.to(device)
+        query_embeddings = query_embeddings.to(device)
+        doc_embeddings = doc_embeddings.to(device)
 
-    num_queries = query_embeddings.shape[0]
-    sim_matrix = []
+        num_queries = query_embeddings.shape[0]
+        sim_matrix = []
 
-    for start in tqdm(range(0, num_queries, batch_size), desc="Computing similarities"):
-        end = min(start + batch_size, num_queries)
-        q_batch = query_embeddings[start:end]
-        sims = torch.matmul(q_batch, doc_embeddings.T)
-        sim_matrix.append(sims.cpu())
+        for start in tqdm(range(0, num_queries, batch_size), desc="Computing similarities"):
+            end = min(start + batch_size, num_queries)
+            q_batch = query_embeddings[start:end]
+            sims = torch.matmul(q_batch, doc_embeddings.T)  # shape: (batch_q, num_docs)
+            sim_matrix.append(sims.cpu())
 
-    sim_matrix = torch.cat(sim_matrix, dim=0)
+        sim_matrix = torch.cat(sim_matrix, dim=0)
 
+    elif cfg.model.type == "cross_encoder":
+        all_query_tokens = list(query_loader.dataset)
+        all_doc_tokens = list(doc_loader.dataset)
+
+        sim_matrix = []
+        for q_idx, query in enumerate(tqdm(all_query_tokens, desc="Cross-encoding query-document pairs")):
+            sims = []
+            query = query.unsqueeze(0).to(device)  # shape (1, T)
+            for doc_start in range(0, len(all_doc_tokens), batch_size):
+                doc_batch = all_doc_tokens[doc_start:doc_start + batch_size]
+                doc_batch = torch.stack(doc_batch).to(device)  # shape (B, T)
+                query_batch = query.expand(doc_batch.size(0), -1)  # repeat query B times
+
+                with torch.no_grad():
+                    logits = model(query_batch, doc_batch).squeeze(-1)  # shape (B,)
+                    scores = torch.sigmoid(logits)  # normalize to [0, 1]
+                sims.append(scores.cpu())
+            sims = torch.cat(sims)
+            sim_matrix.append(sims.unsqueeze(0))  # shape (1, num_docs)
+
+        sim_matrix = torch.cat(sim_matrix, dim=0)  # shape (num_queries, num_docs)
+
+    else:
+        raise ValueError(f"Unknown model type: {cfg.model.type}")
+
+    # Compute top results and metrics
+    # TODO (Make the number of queries and top docs configurable)
     top_results = get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10)
     results = compute_metrics(sim_matrix, qrels, k=10)
 
-    # TODO (Make the number of queries and top docs configurable)
     if cfg.log.wandb:
         rows = []
         for result in top_results:
-            query = result['query_text']
+            query = result["query_text"]
             for idx, doc in enumerate(result["top_documents"], 1):
                 rows.append({
                     "query": query,
@@ -144,9 +171,7 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_mode
                     "doc_text": doc["text"]
                 })
         df = pd.DataFrame(rows)
-        table = wandb.Table(dataframe=df)
-        wandb.log({"top_results": table})
-
+        wandb.log({"top_results": wandb.Table(dataframe=df)})
         wandb.log(results)
 
     return results, top_results

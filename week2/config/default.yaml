@@ -15,37 +15,36 @@ embeddings:
   # path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
   # is_binary: false
 
-query_model:
-  type: "avg_w2v_encoder"
-  hidden_dims: [200, 100]
-  output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_query.pt"
-  # output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+model:
+  type: "dual_encoder"         # "dual_encoder" or "cross_encoder"
 
-document_model:
-  type: "avg_w2v_encoder"
-  hidden_dims: [200, 100]
-  output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_doc.pt"
-  # output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+  shared_embedding: true       # true = share embedding for query/doc
+  freeze_embedding: true
 
-# query_model:
-#   type: "bi_gru_encoder"
-#   hidden_dim: 128
-#   num_layers: 1
-#   output: "/Users/anton/mlx/src/week2/models/glove_bi_gru_query.pt"
+  dual_encoder:                # Used if type == "dual_encoder"
+    query:
+      encoder_type: "rnn"      # "avg" or "rnn"
+      hidden_dims: [200, 100]  # used only if encoder_type == "avg"
+      rnn_type: "gru"          # "gru" or "lstm"
+      hidden_dim: 128
+      num_layers: 1
+      bidirectional: true
+      use_mean_pooling: true
 
-# document_model:
-#   type: "bi_gru_encoder"
-#   hidden_dim: 128
-#   num_layers: 1
-#   output: "/Users/anton/mlx/src/week2/models/glove_bi_gru_query.pt"
+    document:
+      encoder_type: "avg"
+      hidden_dims: [200, 100]
 
-# query_model:
-#   type: "avg_w2v_encoder_noproj"
-#   output: ""
+  cross_encoder:               # Used if type == "cross_encoder"
+    encoder_type: "rnn"
+    hidden_dims: [200, 100]
+    rnn_type: "lstm"
+    hidden_dim: 128
+    num_layers: 1
+    bidirectional: true
+    use_mean_pooling: true
 
-# document_model:
-#   type: "avg_w2v_encoder_noproj"
-#   output: ""
+  save_path: "/Users/anton/mlx/src/week2/models/encoder.pt"  # single file for saving
 
 train:
   epochs: 50
