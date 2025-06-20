@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 
 from embeddings import get_pretrained_w2v_embeddings, PAD_TOKEN
-from data import get_dataloader, extract_eval_data_with_sampling
+from data import get_dataloader, get_evaluation_data
 from model import build_model, create_shared_embedding, save_model, load_model
 from train import train_loop
 from evaluate import evaluate
@@ -66,7 +66,7 @@ def main(cfg, modes):
             print(f"Model restored from {cfg.model.save_path}")
 
         # TODO Make the split configurable
-        query_loader, queries_orig, doc_loader, docs_orig, qrels = extract_eval_data_with_sampling(cfg, "validation", word2idx)
+        query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
 
         results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, cfg, device, pad_token_idx)
 
