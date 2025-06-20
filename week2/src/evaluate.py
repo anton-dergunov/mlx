@@ -1,4 +1,5 @@
 import torch
+from torch.nn.utils.rnn import pad_sequence
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -105,7 +106,7 @@ def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
     return top_results
 
 
-def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg, device, batch_size=1024):
+def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg, device, pad_token_idx, batch_size=1024):
     model.to(device)
     model.eval()
 
@@ -135,22 +136,41 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg
         sim_matrix = []
         for q_idx, query in enumerate(tqdm(all_query_tokens, desc="Cross-encoding query-document pairs")):
             sims = []
-            query_tensor = torch.tensor(query).unsqueeze(0).to(device)  # shape (1, T)
-            
+
+            # Convert query to tensor and pad to match documents later
+            query_tensor = torch.tensor(query, dtype=torch.long).to(device)
+
             for doc_start in range(0, len(all_doc_tokens), batch_size):
                 doc_batch = all_doc_tokens[doc_start:doc_start + batch_size]
-                doc_batch = torch.stack([torch.tensor(doc) for doc in doc_batch]).to(device)  # shape (B, T)
-                query_batch = query_tensor.expand(doc_batch.size(0), -1)  # repeat query B times
+
+                # Convert all documents in batch to tensors
+                doc_batch_tensors = [torch.tensor(doc, dtype=torch.long) for doc in doc_batch]
+
+                # Pad document batch
+                padded_docs = pad_sequence(doc_batch_tensors, batch_first=True, padding_value=pad_token_idx).to(device)  # (B, T_doc)
+
+                # Pad query to match document length
+                query_len = query_tensor.size(0)
+                doc_max_len = padded_docs.size(1)
+                if query_len < doc_max_len:
+                    pad_len = doc_max_len - query_len
+                    padded_query = F.pad(query_tensor, (0, pad_len), value=pad_token_idx)
+                else:
+                    padded_query = query_tensor[:doc_max_len]  # truncate if needed
+
+                # Repeat query for batch
+                query_batch = padded_query.unsqueeze(0).expand(padded_docs.size(0), -1)  # (B, T_doc)
 
                 with torch.no_grad():
-                    logits = model(query_batch, doc_batch).squeeze(-1)  # shape (B,)
+                    logits = model(query_batch, padded_docs).squeeze(-1)  # (B,)
                     scores = torch.sigmoid(logits)  # normalize to [0, 1]
-                sims.append(scores.cpu())
-            
-            sims = torch.cat(sims)
-            sim_matrix.append(sims.unsqueeze(0))  # shape (1, num_docs)
 
-        sim_matrix = torch.cat(sim_matrix, dim=0)  # shape (num_queries, num_docs)
+                sims.append(scores.cpu())
+
+            sims = torch.cat(sims)  # (num_docs,)
+            sim_matrix.append(sims.unsqueeze(0))  # (1, num_docs)
+
+        sim_matrix = torch.cat(sim_matrix, dim=0)  # (num_queries, num_docs)
 
     else:
         raise ValueError(f"Unknown model type: {cfg.model.type}")
