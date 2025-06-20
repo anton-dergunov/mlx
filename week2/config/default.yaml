@@ -23,13 +23,16 @@ model:
 
   dual_encoder:                # Used if type == "dual_encoder"
     query:
-      encoder_type: "rnn"      # "avg" or "rnn"
-      hidden_dims: [200, 100]  # used only if encoder_type == "avg"
-      rnn_type: "gru"          # "gru" or "lstm"
-      hidden_dim: 128
-      num_layers: 1
-      bidirectional: true
-      use_mean_pooling: true
+      encoder_type: "avg"
+      hidden_dims: [200, 100]
+
+      # encoder_type: "rnn"      # "avg" or "rnn"
+      # hidden_dims: [200, 100]  # used only if encoder_type == "avg"
+      # rnn_type: "gru"          # "gru" or "lstm"
+      # hidden_dim: 128
+      # num_layers: 1
+      # bidirectional: true
+      # use_mean_pooling: true
 
     document:
       encoder_type: "avg"

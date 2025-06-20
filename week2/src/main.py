@@ -52,7 +52,7 @@ def main(cfg, modes):
             print("Skip training")
         else:
             print("Starting training...")
-            train_loop(model, model, train_loader, cfg, device)
+            train_loop(model, train_loader, cfg, device)
         
         if model.requires_training and cfg.model.output:
             save_model(model, cfg.model.output)
