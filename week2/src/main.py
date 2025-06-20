@@ -66,7 +66,7 @@ def main(cfg, modes):
             print(f"Model restored from {cfg.model.save_path}")
 
         # TODO Make the split configurable
-        query_loader, queries_orig, doc_loader, docs_orig, qrels = extract_eval_data_with_sampling(cfg, "validation")
+        query_loader, queries_orig, doc_loader, docs_orig, qrels = extract_eval_data_with_sampling(cfg, "validation", word2idx)
 
         results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, model, cfg, device, pad_token_idx)
 

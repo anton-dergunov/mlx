@@ -148,13 +148,7 @@ def extract_eval_data_with_sampling(cfg, split):
         new_rels = [(old_to_new_doc_idx[doc_id], rel) for doc_id, rel in doc_rels]
         remapped_qrels.append((qid, new_rels))
 
-    return (
-        queries_orig_sampled,
-        queries_tokenized_sampled,
-        docs_orig_sampled,
-        docs_tokenized_sampled,
-        remapped_qrels
-    )
+    return queries_orig_sampled, queries_tokenized_sampled, docs_orig_sampled, docs_tokenized_sampled, remapped_qrels
 
 
 class BaseTextDataset(Dataset):
@@ -235,7 +229,7 @@ def get_dataloader(cfg, word2idx):
 
 
 def get_evaluation_data(cfg, split, word2idx):
-    queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels = extract_eval_data(cfg, split)
+    queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels = extract_eval_data_with_sampling(cfg, split)
 
     query_dataset = TextDataset(queries_tokenized, word2idx)
     doc_dataset = TextDataset(docs_tokenized, word2idx)
