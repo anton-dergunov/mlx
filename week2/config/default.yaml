@@ -26,7 +26,7 @@ model:
       encoder_type: "avg"
       hidden_dims: [200, 100]
 
-      # encoder_type: "rnn"      # "avg" or "rnn"
+      # encoder_type: "rnn"      # "avg_no_proj", "avg" or "rnn"
       # hidden_dims: [200, 100]  # used only if encoder_type == "avg"
       # rnn_type: "gru"          # "gru" or "lstm"
       # hidden_dim: 128
@@ -47,12 +47,15 @@ model:
     bidirectional: true
     use_mean_pooling: true
 
-  save_path: "/Users/anton/mlx/src/week2/models/encoder.pt"  # single file for saving
+  save_path: "/Users/anton/mlx/src/week2/models/avg.pt"  # single file for saving
 
 train:
-  epochs: 50
+  epochs: 1
   lr: 0.001
   seed: 42
+
+eval:
+  k: 100
 
 log:
   wandb: true

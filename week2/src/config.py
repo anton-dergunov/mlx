@@ -95,6 +95,14 @@ class TrainConfig:
     seed: int = 42
 
 
+# ---- Eval ----
+
+
+@dataclass
+class EvalConfig:
+    k: int = 100
+
+
 # ---- Logging ----
 
 
@@ -115,6 +123,7 @@ class Config:
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
+    eval: EvalConfig = field(default_factory=EvalConfig)
     log: LoggingConfig = field(default_factory=LoggingConfig)
 
 

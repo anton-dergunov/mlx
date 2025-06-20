@@ -54,16 +54,16 @@ def main(cfg, modes):
             print("Starting training...")
             train_loop(model, train_loader, cfg, device)
         
-        if model.requires_training and cfg.model.output:
-            save_model(model, cfg.model.output)
-            print(f"Model saved to {cfg.model.output}")
+        if model.requires_training and cfg.model.save_path:
+            save_model(model, cfg.model.save_path)
+            print(f"Model saved to {cfg.model.save_path}")
 
         # TODO Upload the models to W&B
 
     if "test" in modes:
-        if model.requires_training and cfg.model.output:
-            load_model(model, cfg.model.output, device)
-            print(f"Model restored from {cfg.model.output}")
+        if model.requires_training and cfg.model.save_path:
+            load_model(model, cfg.model.save_path, device)
+            print(f"Model restored from {cfg.model.save_path}")
 
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)

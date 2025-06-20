@@ -155,8 +155,8 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, model, cfg
 
     # Compute top results and metrics
     # TODO (Make the number of queries and top docs configurable)
-    top_results = get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10)
-    results = compute_metrics(sim_matrix, qrels, k=10)
+    top_results = get_top_results(sim_matrix, qrels, query_texts, doc_texts, cfg.eval.k)
+    results = compute_metrics(sim_matrix, qrels, cfg.eval.k)
 
     if cfg.log.wandb:
         rows = []
