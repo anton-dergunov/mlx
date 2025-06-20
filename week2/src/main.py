@@ -3,6 +3,7 @@ import wandb
 import random
 import numpy as np
 from omegaconf import OmegaConf
+import argparse
 
 from embeddings import get_pretrained_w2v_embeddings, PAD_TOKEN
 from data import get_dataloader, get_evaluation_data
@@ -35,13 +36,15 @@ def main(cfg, modes):
     query_model = get_model(cfg.query_model, shared_embedding, pad_token_idx)
     document_model = get_model(cfg.document_model, shared_embedding, pad_token_idx)
 
-    if "train" in modes:
-        if cfg.log.wandb:
-            wandb.init(
-                project=cfg.log.project,
-                name=cfg.log.run_name,
-                config=OmegaConf.to_container(cfg, resolve=True))
+    # TODO Introduce an option to use the same model instance for doc and query
 
+    if cfg.log.wandb:
+        wandb.init(
+            project=cfg.log.project,
+            name=cfg.log.run_name,
+            config=OmegaConf.to_container(cfg, resolve=True))
+
+    if "train" in modes:
         print("Loading dataset...")
         train_loader = get_dataloader(cfg, word2idx)
 
@@ -61,9 +64,6 @@ def main(cfg, modes):
 
         # TODO Upload the models to W&B
 
-        if cfg.log.wandb:
-            wandb.finish()
-
     if "test" in modes:
         if query_model.requires_training and cfg.query_model.output:
             query_model.load_state_dict(torch.load(cfg.query_model.output, map_location=device))
@@ -76,9 +76,8 @@ def main(cfg, modes):
         # TODO Make the split configurable
         query_loader, queries_orig, doc_loader, docs_orig, qrels = get_evaluation_data(cfg, "validation", word2idx)
 
-        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, query_model, document_model, device)
+        results, top_results = evaluate(query_loader, queries_orig, doc_loader, docs_orig, qrels, query_model, document_model, cfg, device)
 
-        # TODO Log this into W&B as well (and make the number of queries and top docs configurable)
         for result in top_results:
             print(f"\nQuery: {result['query_text']}")
             print("Top Documents:")
@@ -89,11 +88,11 @@ def main(cfg, modes):
         for metric, value in results.items():
             print(f"{metric}: {value:.4f}")
 
-        # FIXME Log these results to wandb
+        if cfg.log.wandb:
+            wandb.finish()
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
     parser.add_argument(

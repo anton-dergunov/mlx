@@ -1,6 +1,8 @@
 import torch
-from tqdm import tqdm
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
+import wandb
 
 
 def get_embeddings(dataloader, model, device):
@@ -104,7 +106,7 @@ def get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10):
     return top_results
 
 
-def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_model, document_model, device, batch_size=1024):
+def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_model, document_model, cfg, device, batch_size=1024):
     query_model.to(device)
     document_model.to(device)
 
@@ -127,5 +129,24 @@ def evaluate(query_loader, query_texts, doc_loader, doc_texts, qrels, query_mode
 
     top_results = get_top_results(sim_matrix, qrels, query_texts, doc_texts, k=10)
     results = compute_metrics(sim_matrix, qrels, k=10)
+
+    # TODO (Make the number of queries and top docs configurable)
+    if cfg.log.wandb:
+        rows = []
+        for result in top_results:
+            query = result['query_text']
+            for idx, doc in enumerate(result["top_documents"], 1):
+                rows.append({
+                    "query": query,
+                    "rank": idx,
+                    "score": doc["score"],
+                    "rel_label": doc["rel_label"],
+                    "doc_text": doc["text"]
+                })
+        df = pd.DataFrame(rows)
+        table = wandb.Table(dataframe=df)
+        wandb.log({"top_results": table})
+
+        wandb.log(results)
 
     return results, top_results

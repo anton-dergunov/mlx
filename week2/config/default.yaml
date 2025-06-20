@@ -9,29 +9,50 @@ dataset:
 
 embeddings:
   # GoogleNews word2vec: https://code.google.com/archive/p/word2vec/
-  # path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
+  path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
+  is_binary: true
   # TODO: Where to get Glove embeddings?
-  path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
-  is_binary: false
+  # path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
+  # is_binary: false
 
 query_model:
   type: "avg_w2v_encoder"
   hidden_dims: [200, 100]
-  # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_query.pt"
-  output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+  output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_query.pt"
+  # output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
 
 document_model:
   type: "avg_w2v_encoder"
   hidden_dims: [200, 100]
-  # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_doc.pt"
-  output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+  output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_doc.pt"
+  # output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+
+# query_model:
+#   type: "bi_gru_encoder"
+#   hidden_dim: 128
+#   num_layers: 1
+#   output: "/Users/anton/mlx/src/week2/models/glove_bi_gru_query.pt"
+
+# document_model:
+#   type: "bi_gru_encoder"
+#   hidden_dim: 128
+#   num_layers: 1
+#   output: "/Users/anton/mlx/src/week2/models/glove_bi_gru_query.pt"
+
+# query_model:
+#   type: "avg_w2v_encoder_noproj"
+#   output: ""
+
+# document_model:
+#   type: "avg_w2v_encoder_noproj"
+#   output: ""
 
 train:
-  epochs: 3
+  epochs: 50
   lr: 0.001
   seed: 42
 
 log:
-  wandb: false
+  wandb: true
   project: "ms-marco-ranking"
   run_name: "googlenews_avg_proj"
