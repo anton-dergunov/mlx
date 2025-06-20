@@ -104,6 +104,59 @@ def extract_eval_data(cfg, split):
     return queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels
 
 
+# FIXME This looks overcomplicated, find a way to simplify it.
+def extract_eval_data_with_sampling(cfg, split):
+    # Load full dataset first
+    queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels = extract_eval_data(cfg, split)
+
+    sample_size = getattr(cfg.eval, "query_sample_size", None)
+    if sample_size is None or sample_size >= len(queries_orig):
+        return queries_orig, queries_tokenized, docs_orig, docs_tokenized, qrels
+
+    print(f"Sampling {sample_size} queries out of {len(queries_orig)}")
+
+    # Sample query indices
+    sampled_indices = sorted(random.sample(range(len(queries_orig)), sample_size))
+
+    # Filter queries
+    queries_orig_sampled = [queries_orig[i] for i in sampled_indices]
+    queries_tokenized_sampled = [queries_tokenized[i] for i in sampled_indices]
+
+    # Map old query index to new index
+    old_to_new_query_idx = {old_idx: new_idx for new_idx, old_idx in enumerate(sampled_indices)}
+
+    # Filter qrels and track used document IDs
+    used_doc_ids = set()
+    qrels_sampled = []
+    for old_idx, doc_rels in qrels:
+        if old_idx in old_to_new_query_idx:
+            new_idx = old_to_new_query_idx[old_idx]
+            qrels_sampled.append((new_idx, doc_rels))
+            for doc_id, _ in doc_rels:
+                used_doc_ids.add(doc_id)
+
+    # Remap document indices
+    used_doc_ids = sorted(used_doc_ids)
+    old_to_new_doc_idx = {old: new for new, old in enumerate(used_doc_ids)}
+
+    docs_orig_sampled = [docs_orig[i] for i in used_doc_ids]
+    docs_tokenized_sampled = [docs_tokenized[i] for i in used_doc_ids]
+
+    # Remap doc ids in qrels
+    remapped_qrels = []
+    for qid, doc_rels in qrels_sampled:
+        new_rels = [(old_to_new_doc_idx[doc_id], rel) for doc_id, rel in doc_rels]
+        remapped_qrels.append((qid, new_rels))
+
+    return (
+        queries_orig_sampled,
+        queries_tokenized_sampled,
+        docs_orig_sampled,
+        docs_tokenized_sampled,
+        remapped_qrels
+    )
+
+
 class BaseTextDataset(Dataset):
     def __init__(self, word2idx):
         self.word2idx = word2idx

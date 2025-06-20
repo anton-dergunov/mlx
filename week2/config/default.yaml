@@ -56,6 +56,7 @@ train:
 
 eval:
   k: 100
+  query_sample_size: 1000
 
 log:
   wandb: true

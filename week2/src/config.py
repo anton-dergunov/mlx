@@ -101,6 +101,7 @@ class TrainConfig:
 @dataclass
 class EvalConfig:
     k: int = 100
+    query_sample_size: Optional[int] = None
 
 
 # ---- Logging ----
