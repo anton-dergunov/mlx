@@ -3,6 +3,7 @@ dataset:
 
 model:
   architecture: "shallow_relu"
+  save_path_base: "models/model"
 
 train:
   epochs: 3
