@@ -1,0 +1,15 @@
+dataset:
+  batch_size: 16
+
+model:
+  type: "dual_encoder"
+
+train:
+  epochs: 3
+  lr: 0.001
+  seed: 42
+
+log:
+  wandb: true
+  project: "sweep_test"
+  run_name: "debug_run"

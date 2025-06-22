@@ -101,7 +101,7 @@ class DualEncoder(nn.Module):
 
     @property
     def requires_training(self):
-        return self.query_encoder.training or self.doc_encoder.training
+        return self.query_encoder.requires_training or self.doc_encoder.requires_training
 
 
 class CrossEncoder(nn.Module):

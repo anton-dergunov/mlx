@@ -45,20 +45,20 @@ def main(cfg, modes):
             config=OmegaConf.to_container(cfg, resolve=True))
 
     if "train" in modes:
-        print("Loading dataset...")
-        train_loader = get_dataloader(cfg, word2idx)
-
         if not model.requires_training:
             print("Skip training")
         else:
+            print("Loading dataset...")
+            train_loader = get_dataloader(cfg, word2idx)
+
             print("Starting training...")
             train_loop(model, train_loader, cfg, device)
         
-        if model.requires_training and cfg.model.save_path:
-            save_model(model, cfg.model.save_path)
-            print(f"Model saved to {cfg.model.save_path}")
+            if cfg.model.save_path:
+                save_model(model, cfg.model.save_path)
+                print(f"Model saved to {cfg.model.save_path}")
 
-        # TODO Upload the models to W&B
+                # TODO Upload the models to W&B
 
     if "test" in modes:
         if model.requires_training and cfg.model.save_path:

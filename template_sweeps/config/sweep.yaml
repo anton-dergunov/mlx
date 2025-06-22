@@ -1,0 +1,15 @@
+program: src/main.py
+method: grid
+parameters:
+  train.lr:
+    values: [0.001, 0.01]
+  model.type:
+    values: ["dual_encoder", "cross_encoder"]
+  train.epochs:
+    values: [2, 3]
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config
+  - config/base.yaml

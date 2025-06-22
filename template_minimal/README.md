@@ -27,10 +27,11 @@ source .venv/bin/activate
 
 ### Create `requirements.txt`:
 ```bash
+pip install pipreqs
 pipreqs . --force --savepath=requirements.txt
 ```
 - `--extra-ext=.ipynb`: to also scan `.ipynb` notebooks
-- `--no-pin`: to drop version pinning
+- `--mode no-pin`: to drop version pinning
 
 Alternative (lists all packages):
 ```bash
@@ -39,8 +40,10 @@ uv pip freeze > requirements.txt
 
 ### Install the requirements
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
+
+Note: It is important to run as `uv pip` to ensure the correct environment is used.
 
 ### Run (after env is activated)
 ```bash
