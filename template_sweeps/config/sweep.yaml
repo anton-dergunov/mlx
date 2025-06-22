@@ -1,12 +1,16 @@
-program: src/main.py
+project: sweep_test
+name: sweep_experiment_baseline
+
 method: grid
 parameters:
   train.lr:
     values: [0.001, 0.01]
-  model.type:
-    values: ["dual_encoder", "cross_encoder"]
   train.epochs:
-    values: [2, 3]
+    values: [5, 10]
+  model.architecture:
+    values: ["shallow_relu", "deep_tanh"]
+
+program: src/main.py
 command:
   - ${env}
   - python

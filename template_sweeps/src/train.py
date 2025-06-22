@@ -1,33 +1,56 @@
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
-from model import SimpleModel
+from torch.utils.data import DataLoader
+from sklearn.metrics import mean_absolute_error, r2_score
 import wandb
+from model import build_model
+from data import get_datasets
+
 
 def train(cfg):
     print("Starting training...")
     torch.manual_seed(cfg["train"]["seed"])
-    model = SimpleModel(cfg["model"]["type"])
 
+    train_ds, val_ds = get_datasets(input_dim=10, dataset_size=500)
+    train_loader = DataLoader(train_ds, batch_size=cfg["dataset"]["batch_size"], shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=cfg["dataset"]["batch_size"])
+
+    model = build_model(cfg["model"]["architecture"])
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["train"]["lr"])
-    loss_fn = nn.MSELoss()
-
-    # Dummy dataset
-    x = torch.randn(100, 10)
-    y = torch.randn(100, 1)
-    loader = DataLoader(TensorDataset(x, y), batch_size=cfg["dataset"]["batch_size"])
+    loss_fn = torch.nn.MSELoss()
 
     wandb.watch(model, log_freq=10)
 
-    model.train()
     for epoch in range(cfg["train"]["epochs"]):
-        for batch_x, batch_y in loader:
+        model.train()
+        train_losses = []
+        for x_batch, y_batch in train_loader:
             optimizer.zero_grad()
-            preds = model(batch_x)
-            loss = loss_fn(preds, batch_y)
+            preds = model(x_batch)
+            loss = loss_fn(preds, y_batch)
             loss.backward()
             optimizer.step()
-        print(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
+            train_losses.append(loss.item())
+
+        model.eval()
+        val_preds, val_labels = [], []
+        with torch.no_grad():
+            for x_batch, y_batch in val_loader:
+                pred = model(x_batch)
+                val_preds.append(pred)
+                val_labels.append(y_batch)
+
+        val_preds = torch.cat(val_preds).squeeze().numpy()
+        val_labels = torch.cat(val_labels).squeeze().numpy()
+
+        val_loss = mean_absolute_error(val_labels, val_preds)
+        val_r2 = r2_score(val_labels, val_preds)
+
+        print(f"Epoch {epoch+1} | Train Loss: {sum(train_losses)/len(train_losses):.4f} | Val MAE: {val_loss:.4f} | Val R2: {val_r2:.4f}")
 
         if cfg["log"]["wandb"]:
-            wandb.log({"epoch": epoch, "loss": loss.item()})
+            wandb.log({
+                "epoch": epoch,
+                "train_loss": sum(train_losses)/len(train_losses),
+                "val_mae": val_loss,
+                "val_r2": val_r2
+            })

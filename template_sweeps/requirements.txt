@@ -2,3 +2,4 @@ PyYAML
 torch
 wandb
 numpy
+scikit-learn

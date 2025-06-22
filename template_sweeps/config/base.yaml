@@ -2,7 +2,7 @@ dataset:
   batch_size: 16
 
 model:
-  type: "dual_encoder"
+  architecture: "shallow_relu"
 
 train:
   epochs: 3
