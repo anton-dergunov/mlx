@@ -9,7 +9,7 @@ metric:
 
 parameters:
   train.lr:
-    values: [1e-4, 3e-4, 1e-3]
+    values: [0.0001, 0.0003, 0.001]
   train.epochs:
     values: [5, 10]
   dataset.batch_size:
