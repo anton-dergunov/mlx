@@ -21,22 +21,11 @@ def seed_all(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def main(base_cfg):
-    seed_all(base_cfg.train.seed)
+def run_with_config(cfg):
+    seed_all(cfg.train.seed)
 
     device = get_device()
     print(f"Using device: {device}")
-
-    if base_cfg.log.wandb:
-        is_sweep = "WANDB_SWEEP_ID" in os.environ
-        wandb.init(
-            project=None if is_sweep else base_cfg.log.project,
-            name=base_cfg.log.run_name,
-            config=extract_sweep_config(base_cfg)
-        )
-        cfg = override_config_with_wandb(base_cfg, wandb.config)
-    else:
-        cfg = base_cfg
 
     train_loader, val_loader, test_loader = load_mnist_dataloaders(
         cfg.dataset.cache_dir,
@@ -80,6 +69,21 @@ def main(base_cfg):
             artifact = wandb.Artifact("trained-model", type="model")
             artifact.add_file(dynamic_path)
             wandb.log_artifact(artifact)
+
+
+def main(base_cfg):
+    if base_cfg.log.wandb:
+        is_sweep = "WANDB_SWEEP_ID" in os.environ
+        wandb.init(
+            project=None if is_sweep else base_cfg.log.project,
+            name=base_cfg.log.run_name,
+            config=extract_sweep_config(base_cfg)
+        )
+        cfg = override_config_with_wandb(base_cfg, wandb.config)
+    else:
+        cfg = base_cfg
+
+    run_with_config(cfg)
 
     if cfg.log.wandb:
         wandb.finish()

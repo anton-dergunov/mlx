@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
