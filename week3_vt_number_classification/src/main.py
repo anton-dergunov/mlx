@@ -21,7 +21,7 @@ def seed_all(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def run_with_config(cfg):
+def main_internal(cfg):
     seed_all(cfg.train.seed)
 
     device = get_device()
@@ -71,7 +71,7 @@ def run_with_config(cfg):
             wandb.log_artifact(artifact)
 
 
-def main(base_cfg):
+def main_with_wandb(base_cfg):
     if base_cfg.log.wandb:
         is_sweep = "WANDB_SWEEP_ID" in os.environ
         wandb.init(
@@ -83,7 +83,7 @@ def main(base_cfg):
     else:
         cfg = base_cfg
 
-    run_with_config(cfg)
+    main_internal(cfg)
 
     if cfg.log.wandb:
         wandb.finish()
@@ -94,4 +94,4 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="config/default.yaml")
     args = parser.parse_args()
     cfg = load_config(args.config)
-    main(cfg)
+    main_with_wandb(cfg)
