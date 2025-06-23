@@ -1,15 +1,16 @@
 import torch
 import wandb
-from omegaconf import OmegaConf
 import random
 import numpy as np
 import argparse
+import datetime
+import os
 
 from model import VisionTransformer
 from data import load_mnist_dataloaders
 from train import train_model
 from utils import get_device
-from config import load_config
+from config import load_config, override_config_with_wandb, extract_sweep_config
 
 
 def seed_all(seed):
@@ -20,17 +21,22 @@ def seed_all(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def main(cfg):
-    seed_all(cfg.train.seed)
+def main(base_cfg):
+    seed_all(base_cfg.train.seed)
 
     device = get_device()
     print(f"Using device: {device}")
 
-    if cfg.log.wandb:
+    if base_cfg.log.wandb:
+        is_sweep = "WANDB_SWEEP_ID" in os.environ
         wandb.init(
-            project=cfg.log.project,
-            name=cfg.log.run_name,
-            config=OmegaConf.to_container(cfg, resolve=True))
+            project=None if is_sweep else base_cfg.log.project,
+            name=base_cfg.log.run_name,
+            config=extract_sweep_config(base_cfg)
+        )
+        cfg = override_config_with_wandb(base_cfg, wandb.config)
+    else:
+        cfg = base_cfg
 
     train_loader, val_loader, test_loader = load_mnist_dataloaders(
         cfg.dataset.cache_dir,
@@ -55,7 +61,25 @@ def main(cfg):
         device,
         model,
         cfg.train.epochs,
-        cfg.train.lr)
+        cfg.train.lr,
+        log_wandb=cfg.log.wandb)
+
+    # Save the trained model locally
+    if "save_path_base" in cfg.model:
+        run_id = wandb.run.id if cfg.log.wandb else "local"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = cfg.model.save_path_base
+        dynamic_path = f"{base}_{timestamp}_{run_id}.pt"
+
+        os.makedirs(os.path.dirname(dynamic_path), exist_ok=True)
+        torch.save(model.state_dict(), dynamic_path)
+        print(f"Model saved to {dynamic_path}")
+
+        # Optionally upload to W&B
+        if cfg.log.wandb:
+            artifact = wandb.Artifact("trained-model", type="model")
+            artifact.add_file(dynamic_path)
+            wandb.log_artifact(artifact)
 
     if cfg.log.wandb:
         wandb.finish()
