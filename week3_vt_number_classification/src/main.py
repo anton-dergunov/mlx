@@ -26,22 +26,39 @@ def main(cfg):
     device = get_device()
     print(f"Using device: {device}")
 
-    # if cfg.log.wandb:
-    wandb.init(
-        project=cfg.log.project,
-        name=cfg.log.run_name,
-        config=OmegaConf.to_container(cfg, resolve=True))
+    if cfg.log.wandb:
+        wandb.init(
+            project=cfg.log.project,
+            name=cfg.log.run_name,
+            config=OmegaConf.to_container(cfg, resolve=True))
 
-    cache_dir = "~/experiment_data/datasets"
+    train_loader, val_loader, test_loader = load_mnist_dataloaders(
+        cfg.dataset.cache_dir,
+        cfg.dataset.batch_size,
+        cfg.dataset.valid_fraction,
+        cfg.dataset.patch_size,
+        cfg.train.seed)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_loader, val_loader, test_loader = load_mnist_dataloaders(cache_dir, batch_size=64)
+    model = VisionTransformer(
+        cfg.dataset.patch_size * cfg.dataset.patch_size,
+        cfg.model.embed_dim,
+        cfg.model.num_heads,
+        cfg.model.mlp_dim,
+        cfg.model.num_transformer_layers,
+        cfg.dataset.num_classes,
+        cfg.dataset.num_patches)
 
-    model = VisionTransformer()
+    train_model(
+        train_loader,
+        val_loader,
+        test_loader,
+        device,
+        model,
+        cfg.train.epochs,
+        cfg.train.lr)
 
-    train_model(train_loader, val_loader, test_loader, device, model, num_epochs=10)
-
-    wandb.finish()
+    if cfg.log.wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":

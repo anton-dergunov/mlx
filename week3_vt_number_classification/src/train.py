@@ -86,11 +86,11 @@ def eval_one_epoch(model, dataloader, criterion, device, return_preds_labels=Fal
     return avg_loss, acc
 
 
-def train_model(train_loader, val_loader, test_loader, device, model, num_epochs = 10):
+def train_model(train_loader, val_loader, test_loader, device, model, num_epochs = 10, lr=3e-4):
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=3e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     for epoch in range(1, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")

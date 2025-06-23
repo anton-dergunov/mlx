@@ -4,7 +4,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import random_split
 
 
-def patchify(img, patch_size):
+def patchify(img, patch_size=14):
     """
     Input:  (1, 28, 28) tensor (MNIST image)
     Output: (num_patches, patch_dim), here (4, 196)
@@ -52,7 +52,7 @@ class PatchifiedMNIST(Dataset):
         return patches, label
 
 
-def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, num_workers=2, seed=42):
+def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_size=14, seed=42, num_workers=2):
     transform = transforms.Compose([
         transforms.ToTensor(),
         # These are mean and standard deviation of the MNIST dataset computed over the training set:
@@ -62,7 +62,7 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, num_wor
     ])
 
     # Full training set
-    full_dataset = PatchifiedMNIST(root=cache_dir, train=True, download=True, transform=transform)
+    full_dataset = PatchifiedMNIST(root=cache_dir, train=True, download=True, patch_size=patch_size, transform=transform)
 
     # Train/val split
     valid_size = int(valid_fraction * len(full_dataset))
@@ -71,7 +71,7 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, num_wor
     train_dataset, val_dataset = random_split(full_dataset, [train_size, valid_size], generator=generator)
 
     # Test set
-    test_dataset = PatchifiedMNIST(root=cache_dir, train=False, download=True, transform=transform)
+    test_dataset = PatchifiedMNIST(root=cache_dir, train=False, download=True, patch_size=patch_size, transform=transform)
 
     # Dataloaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
