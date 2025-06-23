@@ -1,0 +1,65 @@
+project: "ms-marco-ranking"
+
+dataset:
+  # MS Marco: https://huggingface.co/datasets/microsoft/ms_marco
+  name: "microsoft/ms_marco"
+  version: "v1.1"
+  batch_size: 64
+  cache_dir: "/Users/anton/experiment_data/datasets/ms_marco"
+
+embeddings:
+  # GoogleNews word2vec: https://code.google.com/archive/p/word2vec/
+  path: "/Users/anton/experiment_data/models/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"  
+  is_binary: true
+  # TODO: Where to get Glove embeddings?
+  # path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
+  # is_binary: false
+
+model:
+  type: "dual_encoder"         # "dual_encoder" or "cross_encoder"
+
+  shared_embedding: true       # true = share embedding for query/doc
+  freeze_embedding: true
+
+  dual_encoder:                # Used if type == "dual_encoder"
+    query:
+      encoder_type: "avg_no_proj"
+      # hidden_dims: [200, 100]
+
+      # encoder_type: "rnn"      # "avg_no_proj", "avg" or "rnn"
+      # hidden_dims: [200, 100]  # used only if encoder_type == "avg"
+      # rnn_type: "gru"          # "gru" or "lstm"
+      # hidden_dim: 128
+      # num_layers: 1
+      # bidirectional: true
+      # use_mean_pooling: true
+
+    document:
+      encoder_type: "avg_no_proj"
+
+      # encoder_type: "avg"
+      # hidden_dims: [200, 100]
+
+  cross_encoder:               # Used if type == "cross_encoder"
+    encoder_type: "rnn"
+    hidden_dims: [200, 100]
+    rnn_type: "lstm"
+    hidden_dim: 128
+    num_layers: 1
+    bidirectional: true
+    use_mean_pooling: true
+
+  save_path: "/Users/anton/mlx/src/week2/models/avg_no_proj.pt"  # single file for saving
+
+train:
+  epochs: 1
+  lr: 0.001
+  seed: 42
+
+eval:
+  k: 100
+
+log:
+  wandb: false
+  project: "ms-marco-ranking"
+  run_name: "googlenews_avg_proj"

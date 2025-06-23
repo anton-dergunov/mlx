@@ -11,6 +11,7 @@ Plan:
 - Cross encoder
 - Add data to vector database
 - TD-IDF baseline
+- Important fix: introduce sampling of negatives instead of sampling queries for validation
 
 Questions:
 - How do you define the batch size?

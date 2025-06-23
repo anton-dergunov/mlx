@@ -27,7 +27,7 @@ source .venv/bin/activate
 
 ### Create `requirements.txt`:
 ```bash
-pip install pipreqs
+uv pip install pipreqs
 pipreqs . --force --savepath=requirements.txt
 ```
 - `--extra-ext=.ipynb`: to also scan `.ipynb` notebooks
