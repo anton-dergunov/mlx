@@ -3,7 +3,7 @@ import wandb
 import random
 import numpy as np
 import argparse
-import datetime
+from datetime import datetime
 import os
 
 from model import VisionTransformer
