@@ -4,7 +4,7 @@ name: sweep
 method: bayes  # or grid for exhaustive
 
 metric:
-  name: test/accuracy
+  name: val/accuracy
   goal: maximize
 
 parameters:

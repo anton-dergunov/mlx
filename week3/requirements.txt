@@ -7,3 +7,5 @@ torch
 torchvision
 tqdm
 wandb
+pillow
+ipykernel
