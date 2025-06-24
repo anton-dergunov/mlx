@@ -15,11 +15,11 @@ model:
   save_path_base: "/Users/anton/mlx/src/week3_vt_number_classification/models/model"
 
 train:
-  epochs: 10
+  epochs: 2
   lr: 0.0003
   seed: 42
 
 log:
-  wandb: false
+  wandb: true
   project: "vt_num_classification"
   run_name: "test"
