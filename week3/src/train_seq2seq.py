@@ -67,7 +67,7 @@ def eval_one_epoch(model, dataloader, criterion, device, decode_method="greedy")
 
             total_loss += loss.item()
 
-            decoded_preds = decode_sequence_greedy(logits, method=decode_method)
+            decoded_preds = decode_sequence_greedy(model, x)
             all_preds.extend(decoded_preds)
             all_labels.extend(y[:, 1:].tolist())
 

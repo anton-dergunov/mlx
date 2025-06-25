@@ -1,14 +1,15 @@
 dataset:
   patch_size: 14
-  num_patches: 4
+  num_patches: 16
   valid_fraction: 0.2
-  batch_size: 64
-  canvas_size: (56, 56)
-  num_digits: 10
+  batch_size: 8
+  canvas_size_w: 56
+  canvas_size_h: 56
+  num_digits: 4
   placement: grid
   num_digits_range: none
-  num_images: 10000
-  num_images_test: 2000
+  num_images: 100
+  num_images_test: 20
   cache_dir: "/Users/anton/experiment_data/datasets"
 
 model:
@@ -25,7 +26,7 @@ model:
   save_path_base: "/Users/anton/mlx/src/week3/models/vision_to_sequence"
 
 train:
-  epochs: 2
+  epochs: 1
   lr: 0.001
   seed: 42
 

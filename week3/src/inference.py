@@ -35,23 +35,23 @@ def decode_sequence_greedy(model, img_patches, max_len=10):
                 break
 
         # Remove <START> token (first column)
-        decoded = sequences[:, 1:]  # (B, T)
+        result = sequences[:, 1:]  # (B, T)
 
-        # Trim at <END> and optionally pad to max_len
-        trimmed = []
-        for seq in decoded:
-            # Find first END_TOKEN position
-            end_pos = (seq == END_TOKEN).nonzero(as_tuple=True)
-            cut_pos = end_pos[0].item() if len(end_pos[0]) > 0 else len(seq)
+        # Truncate at first <END> in each sequence
+        cleaned = []
+        for seq in result:
+            end_indices = (seq == END_TOKEN).nonzero(as_tuple=False)
+            if len(end_indices) > 0:
+                cut = end_indices[0].item()
+                seq = seq[:cut]
+            cleaned.append(seq)
 
-            # Trim and optionally pad
-            trimmed_seq = seq[:cut_pos]
-            if len(trimmed_seq) < max_len:
-                pad_len = max_len - len(trimmed_seq)
-                trimmed_seq = torch.cat([trimmed_seq, torch.full((pad_len,), END_TOKEN, dtype=seq.dtype, device=seq.device)])
-            trimmed.append(trimmed_seq)
+        # Pad to max_len with END_TOKEN (or you can choose PAD_TOKEN)
+        padded = torch.full((B, max_len), END_TOKEN, dtype=torch.long, device=device)
+        for i, seq in enumerate(cleaned):
+            padded[i, :len(seq)] = seq
 
-        return torch.stack(trimmed).cpu().tolist()
+        return padded.cpu().tolist()
 
 # TODO Implement beam search decoding
 

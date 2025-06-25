@@ -57,10 +57,10 @@ def main_internal(cfg, mode):
             cfg.dataset.patch_size,
             cfg.train.seed,
             composite_mode=True,
-            canvas_size=cfg.dataset.canvas_size,
+            canvas_size=(cfg.dataset.canvas_size_w, cfg.dataset.canvas_size_h),
             num_digits=cfg.dataset.num_digits,
             placement=cfg.dataset.placement,
-            num_digits_range=cfg.dataset.num_digits_range,
+            num_digits_range=None, # TODO Support this cfg.dataset.num_digits_range,
             num_images=cfg.dataset.num_images,
             num_images_test=cfg.dataset.num_images_test)
         
