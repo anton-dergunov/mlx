@@ -8,5 +8,7 @@
 - Visualize attention maps and do other exploration of the internals
 - Print misclassified images
 
+- Profile the model and understand which parts are slow (it has become slower after integrating VisionToSequence)
+
 Fixes:
 - Make sure that data loaders are deterministic

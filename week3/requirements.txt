@@ -9,3 +9,4 @@ tqdm
 wandb
 pillow
 ipykernel
+editdistance

@@ -14,13 +14,14 @@ import os
 
 
 # TODO:
-# 1. Constants for special tokens
 # 2. Wrap into <start> <end>
 # 3. don't hardcode size 28.
 # 4. Replace transforms.Normalize((0.1307,), (0.3081,)) with the real mean and std for the dataset.
 
 
 PAD_TOKEN = 10
+START_TOKEN = 11
+END_TOKEN = 12
 
 
 def patchify(img, patch_size=14):
@@ -213,8 +214,13 @@ def padded_collate_fn(batch):
     if all(t.ndim == 0 for t in targets):
         targets = torch.stack(targets)  # Shape: (B,)
     else:
-        # Otherwise treat them as sequences and pad
-        targets = pad_sequence(targets, batch_first=True, padding_value=PAD_TOKEN)  # Shape: (B, T)
+        # Otherwise treat them as sequences. Include <START> and <END> tokens and pad
+        processed_targets = []
+        for seq in targets:
+            seq_tensor = torch.tensor([START_TOKEN] + list(seq) + [END_TOKEN], dtype=torch.long)
+            processed_targets.append(seq_tensor)
+
+        targets = pad_sequence(processed_targets, batch_first=True, padding_value=PAD_TOKEN)  # Shape: (B, T)
 
     return inputs, targets
 
@@ -222,9 +228,9 @@ def padded_collate_fn(batch):
 def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_size=14,
                             seed=42, num_workers=2, composite_mode=False,
                             canvas_size=(56, 56), num_digits=4, placement='grid',
-                            num_digits_range=None, num_images=10000, num_images_test=2000,
-                            pad_token=10):
+                            num_digits_range=None, num_images=10000, num_images_test=2000):
 
+    # TODO Do not hardcode these parameters
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
