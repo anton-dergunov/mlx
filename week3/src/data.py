@@ -13,24 +13,41 @@ import random
 import os
 
 
+# TODO:
+# 1. Constants for special tokens
+# 2. Wrap into <start> <end>
+# 3. don't hardcode size 28.
+# 4. Replace transforms.Normalize((0.1307,), (0.3081,)) with the real mean and std for the dataset.
+
+
+PAD_TOKEN = 10
+
+
 def patchify(img, patch_size=14):
     """
-    Input (img):  (1, H, W) tensor (MNIST image);  example:  (1, 28, 28)
-    Output:       (num_patches, patch_dim) tensor; example: (4, 196)
+    Converts an image into flatenned patches.
+    Args:
+        img (Tensor):     shape (1, H, W);                        example (1, 28, 28)
+        patch_size (int): width and height of each patch;         example 14
+    Returns:
+        Tensor: (num_patches, patch_dim) flattened patches image; example (4, 196)
     """
-    # img: torch.Tensor with shape (1, 28, 28)
+    # img: torch.Tensor with shape (1, H, W)
     patches = img.unfold(1, patch_size, patch_size) \
                  .unfold(2, patch_size, patch_size)
     # patches shape: (1, num_patches_h, num_patches_w, patch_size, patch_size)
     patches = patches.contiguous().view(-1, patch_size * patch_size)
-    return patches  # shape: (num_patches=4, patch_dim=196)
+    return patches  # shape: (num_patches, patch_dim)
 
 
 def unpatchify(patches, patch_size=14):
     """
     Reconstruct an image from flattened patches.
-    Input (patches):  (num_patches, patch_dim); example (4, 196)
-    Output:           (1, H, W);                example (1, 28, 28)
+    Args:
+        patches (Tensor): shape (num_patches, patch_dim); example (4, 196)
+        patch_size (int): width and height of each patch; example 14
+    Returns:
+        Tensor: (1, H, W) reconstructed image;            example (1, 28, 28)
     """
     num_patches, patch_dim = patches.shape
     assert patch_dim == patch_size ** 2, f"Patch dim mismatch: {patch_dim} != {patch_size}^2"
@@ -183,23 +200,23 @@ class CompositePatchifiedMNIST(Dataset):
         return self.samples[idx]
 
 
-def make_padded_collate_fn(pad_token=10):
-    def collate_fn(batch):
-        inputs, targets = zip(*batch)  # list of (input, target)
+def padded_collate_fn(batch):
+    inputs, targets = zip(*batch)  # list of (input, target)
 
-        # Collate input tensors normally (e.g., stacked patchified tensors)
-        inputs = default_collate(inputs)
+    # Collate input tensors (images or patchified inputs)
+    inputs = default_collate(inputs)
 
-        # Handle scalar targets
-        if isinstance(targets[0], torch.Tensor) and targets[0].ndim == 0:
-            targets = torch.stack(targets)
-        else:
-            # Pad variable-length label sequences
-            targets = pad_sequence(targets, batch_first=True, padding_value=pad_token)
+    # Convert all targets to tensors
+    targets = [torch.tensor(t) if not isinstance(t, torch.Tensor) else t for t in targets]
 
-        return inputs, targets
+    # If all targets are scalar (single value), stack them
+    if all(t.ndim == 0 for t in targets):
+        targets = torch.stack(targets)  # Shape: (B,)
+    else:
+        # Otherwise treat them as sequences and pad
+        targets = pad_sequence(targets, batch_first=True, padding_value=PAD_TOKEN)  # Shape: (B, T)
 
-    return collate_fn
+    return inputs, targets
 
 
 def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_size=14,
@@ -245,10 +262,8 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_s
     generator = torch.Generator().manual_seed(seed)
     train_dataset, val_dataset = random_split(full_dataset, [train_size, valid_size], generator=generator)
 
-    collate_fn = make_padded_collate_fn(pad_token=pad_token)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=padded_collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=padded_collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=padded_collate_fn)
 
     return train_loader, val_loader, test_loader

@@ -11,11 +11,15 @@ model:
   num_heads: 4
   mlp_dim: 128
   num_transformer_layers: 6
+  avg_pooling: false
+  add_pos_emb: true
+  dropout: 0.0
+  dot_product_norm: true
 
-  save_path_base: "/Users/anton/mlx/src/week3_vt_number_classification/models/model"
+  save_path_base: "/Users/anton/mlx/src/week3/models/model"
 
 train:
-  epochs: 2
+  epochs: 5
   lr: 0.0003
   seed: 42
 

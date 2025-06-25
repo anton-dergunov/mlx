@@ -41,7 +41,11 @@ def main_internal(cfg):
         cfg.model.mlp_dim,
         cfg.model.num_transformer_layers,
         cfg.dataset.num_classes,
-        cfg.dataset.num_patches)
+        cfg.dataset.num_patches,
+        cfg.model.avg_pooling,
+        cfg.model.add_pos_emb,
+        cfg.model.dropout,
+        cfg.model.dot_product_norm)
 
     train_model(
         train_loader,

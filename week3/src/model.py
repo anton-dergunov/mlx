@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import math
 
 
 class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads, dot_product_norm=True):
         super().__init__()
         assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
 
@@ -18,6 +17,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+        self.dot_product_norm = dot_product_norm
 
     def forward(self, x):
         B, N, D = x.shape  # Batch, Num tokens, Embedding dim
@@ -33,7 +34,9 @@ class MultiHeadSelfAttention(nn.Module):
         v = v.view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Scaled dot-product attention
-        scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)  # (B, num_heads, N, N)
+        scores = (q @ k.transpose(-2, -1)) # (B, num_heads, N, N)
+        if self.dot_product_norm:
+            scores /= math.sqrt(self.head_dim)
         attn = scores.softmax(dim=-1)
         attended = attn @ v  # (B, num_heads, N, head_dim)
 
@@ -43,9 +46,9 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, embed_dim, num_heads, mlp_dim, dropout=0.0):
+    def __init__(self, embed_dim, num_heads, mlp_dim, dropout=0.0, dot_product_norm=True):
         super().__init__()
-        self.attn = MultiHeadSelfAttention(embed_dim, num_heads)
+        self.attn = MultiHeadSelfAttention(embed_dim, num_heads, dot_product_norm)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
 
@@ -72,7 +75,11 @@ class VisionTransformer(nn.Module):
                  mlp_dim=128,
                  num_layers=6,
                  num_classes=10,
-                 num_patches=4):      # 4 patches per MNIST image
+                 num_patches=4,
+                 avg_pooling=False,
+                 add_pos_emb=True,
+                 dropout=0.0,
+                 dot_product_norm=True):      # 4 patches per MNIST image
         super().__init__()
 
         # Patch embedding projection
@@ -86,12 +93,15 @@ class VisionTransformer(nn.Module):
 
         # Transformer encoder layers
         self.encoder = nn.Sequential(*[
-            TransformerBlock(embed_dim, num_heads, mlp_dim)
+            TransformerBlock(embed_dim, num_heads, mlp_dim, dropout, dot_product_norm)
             for _ in range(num_layers)
         ])
 
         # Final classifier head (based on CLS token)
         self.head = nn.Linear(embed_dim, num_classes)
+
+        self.avg_pooling = avg_pooling
+        self.add_pos_emb = add_pos_emb
 
         self._init_weights()
 
@@ -113,7 +123,8 @@ class VisionTransformer(nn.Module):
         x = torch.cat([cls_token, x], dim=1)          # (B, 5, 64)
 
         # Add positional embeddings
-        x = x + self.pos_embed  # (B, 5, 64)
+        if self.add_pos_emb:
+            x = x + self.pos_embed  # (B, 5, 64)
 
         # Pass through Transformer layers
         x = self.encoder(x)     # (B, 5, 64)
@@ -121,5 +132,11 @@ class VisionTransformer(nn.Module):
         # Extract the CLS token output
         cls_output = x[:, 0]    # (B, 64)
 
+        # An option to use average pooling of the tokens/patches for prediction
+        if self.avg_pooling:
+            head_input = x[:, 1:].mean(dim=1)
+        else:
+            head_input = cls_output
+
         # Final classification
-        return self.head(cls_output)  # (B, 10)
+        return self.head(head_input)  # (B, 10)
