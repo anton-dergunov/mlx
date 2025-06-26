@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MNIST Canvas App</title>
+  <title>MNIST Magic Canvas</title>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
   <style>
     body {
@@ -12,6 +12,7 @@
       color: white;
       text-align: center;
       padding: 2em;
+      overflow: hidden;
     }
 
     canvas {
@@ -19,6 +20,8 @@
       image-rendering: pixelated;
       border: 2px solid #444;
       cursor: crosshair;
+      position: relative;
+      z-index: 1;
     }
 
     #controls {
@@ -40,26 +43,72 @@
       background: #555;
     }
 
-    #output {
+    marquee {
       margin-top: 1em;
-      font-size: 1.2rem;
-      color: #0f0;
+      font-size: 2rem;
+      color: yellow;
+      font-weight: bold;
+      font-family: monospace;
+      border: 3px dashed magenta;
+      padding: 1em;
+    }
+
+    #overlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 630px;
+      height: 630px;
+      font-size: 150px;
+      text-align: center;
+      line-height: 630px;
+      opacity: 0.3;
+      z-index: 2;
+    }
+
+    .flying-wizard {
+      position: absolute;
+      font-size: 150px;
+      z-index: 5;
+      animation: fly 5s linear infinite;
+    }
+
+    @keyframes fly {
+      0% {
+        top: -200px;
+        left: 50%;
+        opacity: 0;
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        top: 120%;
+        left: calc(100% * var(--x));
+        opacity: 0;
+      }
     }
   </style>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text x=%220%22 y=%2214%22>🎨</text></svg>">
 </head>
 <body>
   <h1>Draw a Digit</h1>
-  <canvas id="canvas" width="84" height="84"></canvas>
+  <div style="position: relative; display: inline-block;">
+    <canvas id="canvas" width="84" height="84"></canvas>
+    <div id="overlay">🧙‍♂️</div>
+  </div>
 
   <div id="controls">
     <button onclick="clearCanvas()">Clear</button>
     <button onclick="predict()">Predict</button>
   </div>
 
-  <div id="output">Prediction: <span id="result">...</span></div>
+  <div id="output">
+    <marquee behavior="alternate" id="result"><span id="prediction-text">Prediction: ...</span></marquee>
+  </div>
 
   <script>
-    // Constants
     const CANVAS_SIZE = 84;
     const PATCH_SIZE = 14;
     const PATCH_DIM = PATCH_SIZE * PATCH_SIZE;
@@ -102,23 +151,52 @@
     function clearCanvas() {
       ctx.fillStyle = 'black';
       ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-      document.getElementById('result').innerText = '...';
+      document.getElementById('prediction-text').innerText = 'Prediction: ...';
     }
 
     clearCanvas();
 
+    function spawnFlyingWizards(count = 10) {
+      for (let i = 0; i < count; i++) {
+        const emoji = document.createElement('div');
+        emoji.innerText = '🧙‍♂️';
+        emoji.className = 'flying-wizard';
+        emoji.style.setProperty('--x', Math.random());
+        emoji.style.left = `${Math.random() * 100}%`;
+        emoji.style.top = '-150px';
+        document.body.appendChild(emoji);
+        setTimeout(() => emoji.remove(), 5000);
+      }
+    }
+
     async function predict() {
-      const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-      const gray = toGrayscale(imageData);
-      const normalized = normalize(gray);
-      const patches = patchify(normalized);
+      document.getElementById('overlay').style.display = 'block';
+      document.getElementById('prediction-text').innerText = 'RUNNING ML MAGIC...';
+      canvas.style.filter = 'grayscale(80%) brightness(50%)';
+      canvas.style.pointerEvents = 'none';
+      spawnFlyingWizards(10);
 
-      const input = new ort.Tensor('float32', patches, [1, NUM_PATCHES, PATCH_DIM]);
-      const session = await ort.InferenceSession.create('./model.onnx');
-      const output = await session.run({ input });
+      try {
+        const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        const gray = toGrayscale(imageData);
+        const normalized = normalize(gray);
+        const patches = patchify(normalized);
 
-      const predictions = Object.values(output)[0].data;
-      document.getElementById('result').innerText = Array.from(predictions).join(' ');
+        const input = new ort.Tensor('float32', patches, [1, NUM_PATCHES, PATCH_DIM]);
+        const session = await ort.InferenceSession.create('./model.onnx');
+        const output = await session.run({ input });
+
+        const predictions = Object.values(output)[0].data;
+        const predictionArray = Array.from(predictions, x => Number(x));
+        const filtered = predictionArray.filter(x => Number.isInteger(x) && x >= 0 && x <= 9);
+        document.getElementById('prediction-text').innerText = 'Prediction: ' + filtered.join(' ');
+      } catch (e) {
+        document.getElementById('prediction-text').innerText = 'Error: ' + e;
+      } finally {
+        document.getElementById('overlay').style.display = 'none';
+        canvas.style.filter = '';
+        canvas.style.pointerEvents = 'auto';
+      }
     }
 
     function toGrayscale(imgData) {
