@@ -9,6 +9,13 @@ from inference import decode_sequence_greedy
 from data import PAD_TOKEN, START_TOKEN, END_TOKEN
 
 
+TOKENS_TO_IGNORE = [PAD_TOKEN, START_TOKEN, END_TOKEN]
+
+
+def remove_special_tokens(sequence):
+    return [x for x in sequence if x not in TOKENS_TO_IGNORE]
+
+
 def compute_sequence_metrics(preds, labels):
     """
     preds: list of predicted token sequences
@@ -19,12 +26,9 @@ def compute_sequence_metrics(preds, labels):
     exact_match = 0
     edit_sum = 0
 
-    tokens_to_ignore = [PAD_TOKEN, START_TOKEN, END_TOKEN]
-
     for p, t in zip(preds, labels):
-        # Remove padding
-        p_clean = [x for x in p if x not in tokens_to_ignore]
-        t_clean = [x for x in t if x not in tokens_to_ignore]
+        p_clean = remove_special_tokens(p)
+        t_clean = remove_special_tokens(t)
 
         if p_clean == t_clean:
             exact_match += 1
@@ -54,7 +58,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
     return total_loss / len(dataloader)
 
 
-def eval_one_epoch(model, dataloader, criterion, device, decode_method="greedy"):
+def eval_one_epoch(model, dataloader, criterion, device, decode_method="greedy", num_examples=10):
     model.eval()
     total_loss = 0
     all_preds = []
@@ -75,7 +79,13 @@ def eval_one_epoch(model, dataloader, criterion, device, decode_method="greedy")
 
     avg_loss = total_loss / len(dataloader)
     acc, avg_edit = compute_sequence_metrics(all_preds, all_labels)
-    return avg_loss, acc, avg_edit
+    return avg_loss, acc, avg_edit, zip(all_labels[:num_examples], all_preds[:num_examples])
+
+
+def print_examples(examples):
+    print("Examples (correct sequence -> predicted sequence):")
+    for (correct, predicted) in examples:
+        print(f"  {remove_special_tokens(correct)} -> {remove_special_tokens(predicted)}")
 
 
 def train_seq2seq(train_loader, val_loader, test_loader, device, model,
@@ -92,11 +102,13 @@ def train_seq2seq(train_loader, val_loader, test_loader, device, model,
         print(f"\nEpoch {epoch}/{num_epochs}")
 
         train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_loss, val_acc, val_edit = eval_one_epoch(model, val_loader, criterion, device,
-                                                     decode_method=decode_method)
+        val_loss, val_acc, val_edit, val_examples = eval_one_epoch(model, val_loader, criterion, device,
+                                                                   decode_method=decode_method)
 
         print(f"Train Loss: {train_loss:.4f}")
         print(f"Val   Loss: {val_loss:.4f}, Acc: {val_acc*100:.2f}%, EditDist: {val_edit:.2f}")
+        print_examples(val_examples)
+
 
         if log_wandb:
             wandb.log({
@@ -108,10 +120,11 @@ def train_seq2seq(train_loader, val_loader, test_loader, device, model,
             })
 
     print("\nEvaluating on test set:")
-    test_loss, test_acc, test_edit = eval_one_epoch(model, test_loader, criterion, device,
-                                                    decode_method=decode_method)
+    test_loss, test_acc, test_edit, test_examples = eval_one_epoch(model, test_loader, criterion, device,
+                                                                   decode_method=decode_method)
 
     print(f"Test Loss: {test_loss:.4f}, Acc: {test_acc*100:.2f}%, EditDist: {test_edit:.2f}")
+    print_examples(test_examples)
 
     if log_wandb:
         wandb.log({

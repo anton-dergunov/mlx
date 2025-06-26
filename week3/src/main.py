@@ -58,9 +58,11 @@ def main_internal(cfg, mode):
             cfg.train.seed,
             composite_mode=True,
             canvas_size=(cfg.dataset.canvas_size_w, cfg.dataset.canvas_size_h),
+            grid_rows=cfg.dataset.grid_rows,
+            grid_cols=cfg.dataset.grid_cols,
             num_digits=cfg.dataset.num_digits,
             placement=cfg.dataset.placement,
-            num_digits_range=None, # TODO Support this cfg.dataset.num_digits_range,
+            num_digits_range=cfg.dataset.num_digits_range,
             num_images=cfg.dataset.num_images,
             num_images_test=cfg.dataset.num_images_test)
         

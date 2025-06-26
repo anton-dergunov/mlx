@@ -89,11 +89,13 @@ class PatchifiedMNIST(Dataset):
 
 class CompositePatchifiedMNIST(Dataset):
     def __init__(self, root, train=True, download=True, transform=None,
-                 canvas_size=(56, 56), patch_size=14,
+                 canvas_size=(56, 56), grid_rows=2, grid_cols=2, patch_size=14,
                  num_digits=4, placement='grid', num_images=10000,
                  num_digits_range=None, cache=True, cache_dir=None):
 
         self.canvas_w, self.canvas_h = canvas_size
+        self.grid_rows = grid_rows
+        self.grid_cols = grid_cols
         self.patch_size = patch_size
         self.num_digits = num_digits
         self.num_digits_range = num_digits_range
@@ -138,24 +140,20 @@ class CompositePatchifiedMNIST(Dataset):
                 num_digits = random.randint(*self.num_digits_range)
 
             if self.placement == 'grid':
-                grid_rows = int(np.floor(np.sqrt(num_digits)))
-                grid_cols = int(np.ceil(num_digits / grid_rows))
-                patch_w, patch_h = self.canvas_w // grid_cols, self.canvas_h // grid_rows
+                patch_w, patch_h = self.canvas_w // self.grid_cols, self.canvas_h // self.grid_rows
 
                 for i in range(num_digits):
                     idx = random.randint(0, len(self.mnist) - 1)
                     digit, label = self.mnist[idx]
                     digit = transforms.Resize((patch_h, patch_w))(digit)
-                    row, col = divmod(i, grid_cols)
+                    row, col = divmod(i, self.grid_cols)
                     x = col * patch_w
                     y = row * patch_h
                     img.paste(transforms.ToPILImage()(digit), (x, y))
                     labels.append(label)
 
             elif self.placement == 'random':
-                grid_rows = int(np.floor(np.sqrt(num_digits)))
-                grid_cols = int(np.ceil(num_digits / grid_rows))
-                total_cells = grid_rows * grid_cols
+                total_cells = self.grid_rows * self.grid_cols
 
                 # Randomly choose cells where digits will go
                 chosen_cells = random.sample(range(total_cells), num_digits)
@@ -166,12 +164,12 @@ class CompositePatchifiedMNIST(Dataset):
                     digit_tensor, label = self.mnist[idx]
                     digit_img = transforms.ToPILImage()(digit_tensor)
 
-                    row = cell_index // grid_cols
-                    col = cell_index % grid_cols
+                    row = cell_index // self.grid_cols
+                    col = cell_index % self.grid_cols
 
                     # Compute base position for this cell
-                    cell_w = self.canvas_w // grid_cols
-                    cell_h = self.canvas_h // grid_rows
+                    cell_w = self.canvas_w // self.grid_cols
+                    cell_h = self.canvas_h // self.grid_rows
                     base_x = col * cell_w
                     base_y = row * cell_h
 
@@ -227,7 +225,7 @@ def padded_collate_fn(batch):
 
 def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_size=14,
                             seed=42, num_workers=2, composite_mode=False,
-                            canvas_size=(56, 56), num_digits=4, placement='grid',
+                            canvas_size=(56, 56), grid_rows=2, grid_cols=2, num_digits=4, placement='grid',
                             num_digits_range=None, num_images=10000, num_images_test=2000):
 
     # TODO Do not hardcode these parameters
@@ -243,6 +241,8 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_s
             download=True,
             transform=transform,
             canvas_size=canvas_size,
+            grid_rows = grid_rows,
+            grid_cols = grid_cols,
             num_digits=num_digits,
             placement=placement,
             num_digits_range=num_digits_range,
@@ -254,6 +254,8 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_s
             download=True,
             transform=transform,
             canvas_size=canvas_size,
+            grid_rows = grid_rows,
+            grid_cols = grid_cols,
             num_digits=num_digits,
             placement=placement,
             num_digits_range=num_digits_range,
