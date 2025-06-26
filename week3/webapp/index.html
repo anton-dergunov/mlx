@@ -129,6 +129,19 @@
       color: black;
       text-shadow: 1px 1px 2px lime;
     }
+
+    #result {
+      animation: pulse-size 2s infinite;
+    }
+    
+    @keyframes pulse-size {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+    }
   </style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text x=%220%22 y=%2214%22>🎨</text></svg>">
 </head>
@@ -277,7 +290,7 @@
         const predictionArray = Array.from(predictions, x => Number(x));
         const filtered = predictionArray.filter(x => Number.isInteger(x) && x >= 0 && x <= 9);
 
-        document.getElementById('prediction-text').innerText = 'Prediction: ' + filtered.join(' ');
+        document.getElementById('prediction-text').innerText = '⭐️⭐️⭐️ Prediction: ' + filtered.join(' ') + ' ⭐️⭐️⭐️';
 
         explodeMagic();
       } catch (e) {
