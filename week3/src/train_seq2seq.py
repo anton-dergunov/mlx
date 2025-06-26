@@ -6,7 +6,7 @@ import wandb
 import editdistance
 
 from inference import decode_sequence_greedy
-from data import PAD_TOKEN
+from data import PAD_TOKEN, START_TOKEN, END_TOKEN
 
 
 def compute_sequence_metrics(preds, labels):
@@ -19,10 +19,12 @@ def compute_sequence_metrics(preds, labels):
     exact_match = 0
     edit_sum = 0
 
+    tokens_to_ignore = [PAD_TOKEN, START_TOKEN, END_TOKEN]
+
     for p, t in zip(preds, labels):
         # Remove padding
-        p_clean = [x for x in p if x != PAD_TOKEN]
-        t_clean = [x for x in t if x != PAD_TOKEN]
+        p_clean = [x for x in p if x not in tokens_to_ignore]
+        t_clean = [x for x in t if x not in tokens_to_ignore]
 
         if p_clean == t_clean:
             exact_match += 1

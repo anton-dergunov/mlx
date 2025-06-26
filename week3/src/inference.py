@@ -7,6 +7,14 @@ def decode_sequence_greedy(model, img_patches, max_len=10):
     """
     Autoregressively decode output sequences from image patches using greedy decoding.
     Supports batch input.
+    
+    Args:
+        model: Vision-to-sequence model with `.encode()` and `.decode()` methods.
+        img_patches: Tensor of shape (B, N_patches) representing input images.
+        max_len: Maximum sequence length to decode.
+
+    Returns:
+        List of decoded sequences (as Python lists of ints), one per batch item.
     """
     model.eval()
     device = next(model.parameters()).device
@@ -37,21 +45,16 @@ def decode_sequence_greedy(model, img_patches, max_len=10):
         # Remove <START> token (first column)
         result = sequences[:, 1:]  # (B, T)
 
-        # Truncate at first <END> in each sequence
-        cleaned = []
-        for seq in result:
-            end_indices = (seq == END_TOKEN).nonzero(as_tuple=False)
-            if len(end_indices) > 0:
-                cut = end_indices[0].item()
-                seq = seq[:cut]
-            cleaned.append(seq)
+        # Convert to list of Python lists and truncate at END_TOKEN
+        decoded = []
+        for seq in result.tolist():
+            if END_TOKEN in seq:
+                idx = seq.index(END_TOKEN)
+                decoded.append(seq[:idx])
+            else:
+                decoded.append(seq)
 
-        # Pad to max_len with END_TOKEN (or you can choose PAD_TOKEN)
-        padded = torch.full((B, max_len), END_TOKEN, dtype=torch.long, device=device)
-        for i, seq in enumerate(cleaned):
-            padded[i, :len(seq)] = seq
-
-        return padded.cpu().tolist()
+    return decoded
 
 # TODO Implement beam search decoding
 
