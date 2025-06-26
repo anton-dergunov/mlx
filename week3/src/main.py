@@ -93,7 +93,7 @@ def main_internal(cfg, mode):
 
     else:
         raise ValueError(f"Invalid mode: '{mode}'. Mode should be one of 'classifier' or 'seq2seq'.")
-        
+
     # Save the trained model locally
     if "save_path_base" in cfg.model:
         run_id = wandb.run.id if cfg.log.wandb else "local"

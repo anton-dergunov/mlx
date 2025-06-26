@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from data import START_TOKEN, END_TOKEN
 
@@ -55,6 +56,26 @@ def decode_sequence_greedy(model, img_patches, max_len=10):
                 decoded.append(seq)
 
     return decoded
+
+
+class InferenceWrapper(nn.Module):
+    def __init__(self, model, max_len=10):
+        super().__init__()
+        self.model = model
+        self.max_len = max_len
+
+    def forward(self, img_patches):
+        # img_patches: [B, 36, 196]
+        memory = self.model.encode(img_patches)  # [B, N, D]
+        B = img_patches.shape[0]
+        sequences = torch.full((B, 1), START_TOKEN, dtype=torch.long, device=img_patches.device)
+
+        for _ in range(self.max_len):
+            logits = self.model.decode(memory, sequences)  # (B, T, vocab_size)
+            next_token = logits[:, -1].argmax(dim=-1)      # (B,)
+            sequences = torch.cat([sequences, next_token.unsqueeze(1)], dim=1)
+
+        return sequences[:, 1:]  # remove START token
 
 # TODO Implement beam search decoding
 

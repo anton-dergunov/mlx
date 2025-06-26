@@ -10,3 +10,4 @@ wandb
 pillow
 ipykernel
 editdistance
+onnx
