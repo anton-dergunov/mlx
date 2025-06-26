@@ -13,6 +13,8 @@
       text-align: center;
       padding: 2em;
       animation: bgFlash 5s infinite alternate;
+      overflow: hidden;
+      position: relative;
     }
 
     @keyframes bgFlash {
@@ -78,9 +80,21 @@
       animation: spin 1s linear infinite;
     }
 
+    .mini-magician {
+      position: absolute;
+      font-size: 50px;
+      animation: spinReverse 1.5s linear infinite;
+      z-index: 2;
+    }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+
+    @keyframes spinReverse {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(-360deg); }
     }
 
     .flying-emoji {
@@ -95,6 +109,18 @@
       to { opacity: 0; transform: scale(2) translate(var(--x), var(--y)); }
     }
 
+    .side-gif {
+      width: 300px;
+      height: auto;
+    }
+
+    .side-container {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1em;
+      align-items: center;
+    }
+
     .toxic-border {
       border: 10px groove hotpink;
       padding: 1em;
@@ -107,19 +133,29 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text x=%220%22 y=%2214%22>🎨</text></svg>">
 </head>
 <body>
+  <audio id="bg-audio" loop>
+    <source src="fun/stevie_wonder_another_star.mp3" type="audio/mpeg">
+  </audio>
+
   <div class="toxic-border">
     <h1>🧠⚡ Welcome to the Ultimate Hyper Intelligent Digit Predictor 9000 ⚡🧠</h1>
     <p style="font-size: 1.5rem;">WARNING: May predict your future or explode your browser 💥</p>
   </div>
 
-  <div style="position: relative; display: inline-block;">
-    <canvas id="canvas" width="84" height="84"></canvas>
-    <div id="overlay">🧙‍♂️</div>
+  <div class="side-container">
+    <img id="left-gif" class="side-gif" src="fun/01.gif" alt="fun gif">
+    <div style="position: relative; display: inline-block;">
+      <canvas id="canvas" width="84" height="84"></canvas>
+      <div id="overlay">🧙‍♂️</div>
+      <div id="minions"></div>
+    </div>
+    <img id="right-gif" class="side-gif" src="fun/02.gif" alt="fun gif">
   </div>
 
   <div id="controls">
     <button onclick="clearCanvas()">💣 PURGE CANVAS 💣</button>
     <button onclick="predict()">🔮 UNLEASH PREDICTION 🔮</button>
+    <button onclick="document.getElementById('bg-audio').play()">🔊 PLAY MUSIC</button>
   </div>
 
   <div id="output">
@@ -158,6 +194,24 @@
       drawing = false;
     });
 
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < 3; i++) {
+        const step = CANVAS_SIZE / 3;
+        ctx.beginPath();
+        ctx.moveTo(i * step, 0);
+        ctx.lineTo(i * step, CANVAS_SIZE);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * step);
+        ctx.lineTo(CANVAS_SIZE, i * step);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+    }
+
     function getMousePos(evt) {
       const rect = canvas.getBoundingClientRect();
       return [
@@ -169,10 +223,20 @@
     function clearCanvas() {
       ctx.fillStyle = 'black';
       ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      drawGrid();
       document.getElementById('prediction-text').innerText = 'Prediction: ...';
     }
 
     clearCanvas();
+
+    function cycleSideGifs() {
+      const files = Array.from({length: 10}, (_, i) => `fun/${String(i+1).padStart(2,'0')}.gif`);
+      setInterval(() => {
+        document.getElementById('left-gif').src = files[Math.floor(Math.random() * files.length)];
+        document.getElementById('right-gif').src = files[Math.floor(Math.random() * files.length)];
+      }, 5000);
+    }
+    cycleSideGifs();
 
     async function predict() {
       const overlay = document.getElementById('overlay');
@@ -181,6 +245,23 @@
       document.getElementById('prediction-text').innerText = 'RUNNING ML MAGIC...';
       canvas.style.filter = 'grayscale(100%) brightness(30%)';
       canvas.style.pointerEvents = 'none';
+
+      const minions = document.getElementById('minions');
+      minions.innerHTML = '';
+      const cx = canvas.offsetLeft + canvas.offsetWidth / 2;
+      const cy = canvas.offsetTop + canvas.offsetHeight / 2;
+      const r = 200;
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        const div = document.createElement('div');
+        div.className = 'mini-magician';
+        div.innerText = '🧙‍♂️';
+        div.style.left = x + 'px';
+        div.style.top = y + 'px';
+        minions.appendChild(div);
+      }
 
       try {
         const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -203,32 +284,30 @@
         document.getElementById('prediction-text').innerText = 'Error: ' + e;
       } finally {
         overlay.style.display = 'none';
+        minions.innerHTML = '';
         canvas.style.filter = '';
         canvas.style.pointerEvents = 'auto';
       }
     }
 
     function explodeMagic() {
-      const overlay = document.getElementById('overlay');
-      overlay.style.transition = 'transform 0.2s ease-out';
-      overlay.style.transform = 'scale(1.3)';
-
-      setTimeout(() => {
-        const emojis = ['✨', '💥', '🧠', '🛸', '💫', '🎇', '🔥', '🎉', '👾', '🧪'];
-        for (let i = 0; i < 20; i++) {
-          const el = document.createElement('div');
-          el.className = 'flying-emoji';
-          el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-          el.style.left = '300px';
-          el.style.top = '300px';
-          const angle = Math.random() * 2 * Math.PI;
-          const distance = 300 + Math.random() * 200;
-          el.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
-          el.style.setProperty('--y', `${Math.sin(angle) * distance}px`);
-          document.body.appendChild(el);
-          setTimeout(() => el.remove(), 1500);
-        }
-      }, 300);
+      const rect = canvas.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const emojis = ['✨', '💥', '🧠', '🛸', '💫', '🎇', '🔥', '🎉', '👾', '🧪'];
+      for (let i = 0; i < 30; i++) {
+        const el = document.createElement('div');
+        el.className = 'flying-emoji';
+        el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+        el.style.left = centerX + 'px';
+        el.style.top = centerY + 'px';
+        const angle = Math.random() * 2 * Math.PI;
+        const distance = 300 + Math.random() * 200;
+        el.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
+        el.style.setProperty('--y', `${Math.sin(angle) * distance}px`);
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1500);
+      }
     }
 
     function toGrayscale(imgData) {
@@ -264,6 +343,24 @@
       }
       return patches;
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const audio = document.getElementById('bg-audio');
+      let hasInteracted = false;
+    
+      const tryPlayAudio = () => {
+        if (!hasInteracted) {
+          audio.play().catch(e => {
+            console.log("Autoplay blocked until user interaction.");
+          });
+          hasInteracted = true;
+        }
+      };
+    
+      // Trigger on any click or key
+      document.body.addEventListener('click', tryPlayAudio);
+      document.body.addEventListener('keydown', tryPlayAudio);
+    });
   </script>
 </body>
 </html>
