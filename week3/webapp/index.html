@@ -3,54 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MNIST Magic Canvas</title>
+  <title>⚡⚠️ Mega Hyper Digit Prediction Machine 9000™ ⚠️⚡</title>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
   <style>
     body {
-      font-family: 'Helvetica Neue', sans-serif;
-      background-color: #1a1a1a;
-      color: white;
+      background: repeating-linear-gradient(45deg, #111, #111 10px, #222 10px, #222 20px);
+      font-family: 'Courier New', monospace;
+      color: #39ff14;
       text-align: center;
       padding: 2em;
-      overflow: hidden;
+      animation: bgFlash 5s infinite alternate;
+    }
+
+    @keyframes bgFlash {
+      0% { background-color: black; }
+      100% { background-color: darkred; }
     }
 
     canvas {
       background: black;
       image-rendering: pixelated;
-      border: 2px solid #444;
+      border: 5px dotted lime;
       cursor: crosshair;
       position: relative;
       z-index: 1;
+      margin-bottom: 1em;
     }
 
-    #controls {
-      margin-top: 1em;
-    }
-
-    button {
+    #controls button {
       margin: 0.5em;
-      padding: 0.5em 1em;
-      font-size: 1rem;
-      background: #333;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
+      padding: 1em;
+      font-size: 1.2rem;
+      font-weight: bold;
+      background: #ff00ff;
+      color: yellow;
+      border: 4px ridge cyan;
+      box-shadow: 0 0 10px red;
+      text-transform: uppercase;
+      font-family: "Comic Sans MS", cursive, sans-serif;
     }
 
-    button:hover {
-      background: #555;
+    #controls button:hover {
+      background: cyan;
+      color: black;
     }
 
     marquee {
       margin-top: 1em;
-      font-size: 2rem;
-      color: yellow;
-      font-weight: bold;
-      font-family: monospace;
-      border: 3px dashed magenta;
+      font-size: 2.2rem;
+      color: #00ffff;
+      font-weight: bolder;
+      border: 6px double yellow;
       padding: 1em;
+      text-shadow: 0 0 5px red;
+      animation: textFlash 1s infinite alternate;
+    }
+
+    @keyframes textFlash {
+      from { color: lime; }
+      to { color: magenta; }
     }
 
     #overlay {
@@ -60,48 +71,55 @@
       left: 0;
       width: 630px;
       height: 630px;
-      font-size: 150px;
-      text-align: center;
+      font-size: 300px;
       line-height: 630px;
-      opacity: 0.3;
-      z-index: 2;
+      text-align: center;
+      z-index: 3;
+      animation: spin 1s linear infinite;
     }
 
-    .flying-wizard {
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .flying-emoji {
       position: absolute;
-      font-size: 150px;
-      z-index: 5;
-      animation: fly 5s linear infinite;
+      font-size: 50px;
+      z-index: 999;
+      animation: explode 1.5s ease-out forwards;
     }
 
-    @keyframes fly {
-      0% {
-        top: -200px;
-        left: 50%;
-        opacity: 0;
-      }
-      50% {
-        opacity: 1;
-      }
-      100% {
-        top: 120%;
-        left: calc(100% * var(--x));
-        opacity: 0;
-      }
+    @keyframes explode {
+      from { opacity: 1; transform: scale(1) translate(0, 0); }
+      to { opacity: 0; transform: scale(2) translate(var(--x), var(--y)); }
+    }
+
+    .toxic-border {
+      border: 10px groove hotpink;
+      padding: 1em;
+      margin: 1em;
+      background: linear-gradient(to bottom, yellow, red);
+      color: black;
+      text-shadow: 1px 1px 2px lime;
     }
   </style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text x=%220%22 y=%2214%22>🎨</text></svg>">
 </head>
 <body>
-  <h1>Draw a Digit</h1>
+  <div class="toxic-border">
+    <h1>🧠⚡ Welcome to the Ultimate Hyper Intelligent Digit Predictor 9000 ⚡🧠</h1>
+    <p style="font-size: 1.5rem;">WARNING: May predict your future or explode your browser 💥</p>
+  </div>
+
   <div style="position: relative; display: inline-block;">
     <canvas id="canvas" width="84" height="84"></canvas>
     <div id="overlay">🧙‍♂️</div>
   </div>
 
   <div id="controls">
-    <button onclick="clearCanvas()">Clear</button>
-    <button onclick="predict()">Predict</button>
+    <button onclick="clearCanvas()">💣 PURGE CANVAS 💣</button>
+    <button onclick="predict()">🔮 UNLEASH PREDICTION 🔮</button>
   </div>
 
   <div id="output">
@@ -156,25 +174,13 @@
 
     clearCanvas();
 
-    function spawnFlyingWizards(count = 10) {
-      for (let i = 0; i < count; i++) {
-        const emoji = document.createElement('div');
-        emoji.innerText = '🧙‍♂️';
-        emoji.className = 'flying-wizard';
-        emoji.style.setProperty('--x', Math.random());
-        emoji.style.left = `${Math.random() * 100}%`;
-        emoji.style.top = '-150px';
-        document.body.appendChild(emoji);
-        setTimeout(() => emoji.remove(), 5000);
-      }
-    }
-
     async function predict() {
-      document.getElementById('overlay').style.display = 'block';
+      const overlay = document.getElementById('overlay');
+      overlay.style.display = 'block';
+      overlay.style.transform = 'scale(1)';
       document.getElementById('prediction-text').innerText = 'RUNNING ML MAGIC...';
-      canvas.style.filter = 'grayscale(80%) brightness(50%)';
+      canvas.style.filter = 'grayscale(100%) brightness(30%)';
       canvas.style.pointerEvents = 'none';
-      spawnFlyingWizards(10);
 
       try {
         const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -189,14 +195,40 @@
         const predictions = Object.values(output)[0].data;
         const predictionArray = Array.from(predictions, x => Number(x));
         const filtered = predictionArray.filter(x => Number.isInteger(x) && x >= 0 && x <= 9);
+
         document.getElementById('prediction-text').innerText = 'Prediction: ' + filtered.join(' ');
+
+        explodeMagic();
       } catch (e) {
         document.getElementById('prediction-text').innerText = 'Error: ' + e;
       } finally {
-        document.getElementById('overlay').style.display = 'none';
+        overlay.style.display = 'none';
         canvas.style.filter = '';
         canvas.style.pointerEvents = 'auto';
       }
+    }
+
+    function explodeMagic() {
+      const overlay = document.getElementById('overlay');
+      overlay.style.transition = 'transform 0.2s ease-out';
+      overlay.style.transform = 'scale(1.3)';
+
+      setTimeout(() => {
+        const emojis = ['✨', '💥', '🧠', '🛸', '💫', '🎇', '🔥', '🎉', '👾', '🧪'];
+        for (let i = 0; i < 20; i++) {
+          const el = document.createElement('div');
+          el.className = 'flying-emoji';
+          el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+          el.style.left = '300px';
+          el.style.top = '300px';
+          const angle = Math.random() * 2 * Math.PI;
+          const distance = 300 + Math.random() * 200;
+          el.style.setProperty('--x', `${Math.cos(angle) * distance}px`);
+          el.style.setProperty('--y', `${Math.sin(angle) * distance}px`);
+          document.body.appendChild(el);
+          setTimeout(() => el.remove(), 1500);
+        }
+      }, 300);
     }
 
     function toGrayscale(imgData) {
