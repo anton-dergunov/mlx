@@ -52,6 +52,8 @@ def main_internal(cfg, mode):
     elif mode == "seq2seq":
         train_loader, val_loader, test_loader = load_mnist_dataloaders(
             cfg.dataset.cache_dir,
+            cfg.dataset.name,
+            cfg.dataset.source_dir,
             cfg.dataset.batch_size,
             cfg.dataset.valid_fraction,
             cfg.dataset.patch_size,
@@ -75,6 +77,9 @@ def main_internal(cfg, mode):
             num_layers_encoder=cfg.model.num_layers_encoder,
             num_layers_decoder=cfg.model.num_layers_decoder,
             num_patches=cfg.dataset.num_patches)
+        
+        if "initial_model" in cfg.model:
+            model.load_state_dict(torch.load(cfg.model.initial_model, map_location=device))
 
             # TODO Expose these parameters
             # cfg.model.add_pos_emb,

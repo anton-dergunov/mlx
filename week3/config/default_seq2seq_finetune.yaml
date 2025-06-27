@@ -1,20 +1,20 @@
 dataset:
-  name: "MNIST"
+  name: "number-scribbles"
   patch_size: 14
   num_patches: 36
   valid_fraction: 0.2
   batch_size: 8
   canvas_size_w: 84
   canvas_size_h: 84
-  grid_rows: 3
+  grid_rows: 3  # FIXME Make the parameters below optional
   grid_cols: 3
   num_digits: null
-  placement: random
-  num_digits_range: [0, 9]
-  num_images: 100000
-  num_images_test: 20000
-  source_dir: ""
-  cache_dir: "/Users/anton/experiment_data/datasets"
+  placement: null
+  num_digits_range: null
+  num_images: null
+  num_images_test: null
+  source_dir: "/Users/anton/experiment_data/datasets/number-scribbles"
+  cache_dir: ""
 
 model:
   embed_dim: 256
@@ -27,11 +27,11 @@ model:
   dropout: 0.0
   dot_product_norm: true
 
-  initial_model: null
+  initial_model: "/Users/anton/mlx/src/week3/models/vision_to_sequence_random_20250627_045042_yqpp63sn.pt"
   save_path_base: "/Users/anton/mlx/src/week3/models/vision_to_sequence_random"
 
 train:
-  epochs: 10
+  epochs: 50
   lr: 0.0001
   seed: 42
 

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MNIST Canvas App</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', sans-serif;
+      background-color: #1a1a1a;
+      color: white;
+      text-align: center;
+      padding: 2em;
+    }
+
+    canvas {
+      background: black;
+      image-rendering: pixelated;
+      border: 2px solid #444;
+      cursor: crosshair;
+    }
+
+    #controls {
+      margin-top: 1em;
+    }
+
+    button {
+      margin: 0.5em;
+      padding: 0.5em 1em;
+      font-size: 1rem;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    #output {
+      margin-top: 1em;
+      font-size: 1.2rem;
+      color: #0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Draw a Digit</h1>
+  <canvas id="canvas" width="84" height="84"></canvas>
+
+  <div id="controls">
+    <button onclick="clearCanvas()">Clear</button>
+    <button onclick="predict()">Predict</button>
+  </div>
+
+  <div id="output">Prediction: <span id="result">...</span></div>
+
+  <script>
+    // Constants
+    const CANVAS_SIZE = 84;
+    const PATCH_SIZE = 14;
+    const PATCH_DIM = PATCH_SIZE * PATCH_SIZE;
+    const NUM_PATCHES = (CANVAS_SIZE / PATCH_SIZE) ** 2;
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.style.width = '630px';
+    canvas.style.height = '630px';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'white';
+
+    let drawing = false;
+
+    canvas.addEventListener('mousedown', (e) => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(...getMousePos(e));
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (drawing) {
+        ctx.lineTo(...getMousePos(e));
+        ctx.stroke();
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      drawing = false;
+    });
+
+    function getMousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      return [
+        (evt.clientX - rect.left) * (canvas.width / canvas.clientWidth),
+        (evt.clientY - rect.top) * (canvas.height / canvas.clientHeight)
+      ];
+    }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < 3; i++) {
+        const step = CANVAS_SIZE / 3;
+        ctx.beginPath();
+        ctx.moveTo(i * step, 0);
+        ctx.lineTo(i * step, CANVAS_SIZE);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * step);
+        ctx.lineTo(CANVAS_SIZE, i * step);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1;
+    }
+
+    function clearCanvas() {
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      drawGrid();
+      document.getElementById('result').innerText = '...';
+    }
+
+    clearCanvas();
+
+    async function predict() {
+      document.getElementById('result').innerText = 'Running ML magic...';
+
+      const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      const gray = toGrayscale(imageData);
+      const normalized = normalize(gray);
+      const patches = patchify(normalized);
+
+      const input = new ort.Tensor('float32', patches, [1, NUM_PATCHES, PATCH_DIM]);
+      const session = await ort.InferenceSession.create('./model.onnx');
+      const output = await session.run({ input });
+
+      const predictions = Object.values(output)[0].data;
+      const predictionArray = Array.from(predictions, x => Number(x));
+      const filtered = predictionArray.filter(x => Number.isInteger(x) && x >= 0 && x <= 9);
+
+      document.getElementById('result').innerText = filtered.join(' ');
+    }
+
+    function toGrayscale(imgData) {
+      const gray = new Float32Array(CANVAS_SIZE * CANVAS_SIZE);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const r = imgData.data[i];
+        const g = imgData.data[i + 1];
+        const b = imgData.data[i + 2];
+        gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+      }
+      return gray;
+    }
+
+    function normalize(gray) {
+      const mean = 0.1307 * 255;
+      const std = 0.3081 * 255;
+      return gray.map(v => (v - mean) / std);
+    }
+
+    function patchify(img) {
+      const patches = new Float32Array(NUM_PATCHES * PATCH_DIM);
+      let idx = 0;
+      for (let y = 0; y < CANVAS_SIZE; y += PATCH_SIZE) {
+        for (let x = 0; x < CANVAS_SIZE; x += PATCH_SIZE) {
+          for (let dy = 0; dy < PATCH_SIZE; dy++) {
+            for (let dx = 0; dx < PATCH_SIZE; dx++) {
+              const px = x + dx;
+              const py = y + dy;
+              patches[idx++] = img[py * CANVAS_SIZE + px];
+            }
+          }
+        }
+      }
+      return patches;
+    }
+  </script>
+</body>
+</html>

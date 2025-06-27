@@ -14,7 +14,6 @@ import os
 
 
 # TODO:
-# 2. Wrap into <start> <end>
 # 3. don't hardcode size 28.
 # 4. Replace transforms.Normalize((0.1307,), (0.3081,)) with the real mean and std for the dataset.
 
@@ -130,6 +129,8 @@ class CompositePatchifiedMNIST(Dataset):
         return hashlib.md5(hash_input).hexdigest()
 
     def _precompute(self):
+        from torchvision.transforms import functional as TF
+
         samples = []
         for _ in tqdm(range(self.num_images), desc="Generating composite MNIST"):
             img = Image.new('L', (self.canvas_w, self.canvas_h), color=0)
@@ -157,25 +158,49 @@ class CompositePatchifiedMNIST(Dataset):
 
                 # Randomly choose cells where digits will go
                 chosen_cells = random.sample(range(total_cells), num_digits)
-                chosen_cells.sort()  # Keep left-to-right, top-to-bottom order
+                chosen_cells.sort()
 
                 for i, cell_index in enumerate(chosen_cells):
                     idx = random.randint(0, len(self.mnist) - 1)
                     digit_tensor, label = self.mnist[idx]
                     digit_img = transforms.ToPILImage()(digit_tensor)
 
+                    # === Augment ===
+
+                    # Random rotation (normal distribution, std 30 degrees)
+                    angle = random.gauss(0, 30)
+                    digit_img = TF.rotate(digit_img, angle, fill=0)
+
+                    # Random scale (normal distribution, std 1.3, mean 1)
+                    scale_factor = max(0.5, random.gauss(1.0, 0.3))
+                    new_size = max(10, int(28 * scale_factor))
+                    digit_img = TF.resize(digit_img, (new_size, new_size))
+
+                    # Random affine stretch/shear
+                    shear_x = random.uniform(-10, 10)
+                    shear_y = random.uniform(-10, 10)
+                    digit_img = TF.affine(digit_img, angle=0, translate=(0, 0), scale=1.0, shear=[shear_x, shear_y], fill=0)
+
+                    # Random intensity bump: brighten non-black pixels
+                    if random.random() < 0.8:
+                        arr = np.array(digit_img, dtype=np.float32)
+                        arr[arr > 0] *= random.uniform(1.1, 1.5)
+                        arr = np.clip(arr, 0, 255).astype(np.uint8)
+                        digit_img = Image.fromarray(arr)
+
+                    # === Placement ===
+
                     row = cell_index // self.grid_cols
                     col = cell_index % self.grid_cols
 
-                    # Compute base position for this cell
                     cell_w = self.canvas_w // self.grid_cols
                     cell_h = self.canvas_h // self.grid_rows
                     base_x = col * cell_w
                     base_y = row * cell_h
 
-                    # Jitter (can push image partially outside cell)
-                    max_x_jitter = max(cell_w - 28, 0)
-                    max_y_jitter = max(cell_h - 28, 0)
+                    # Small extra jitter inside cell
+                    max_x_jitter = max(cell_w - digit_img.size[0], 0)
+                    max_y_jitter = max(cell_h - digit_img.size[1], 0)
                     jitter_x = random.randint(0, max_x_jitter) if max_x_jitter > 0 else 0
                     jitter_y = random.randint(0, max_y_jitter) if max_y_jitter > 0 else 0
 
@@ -184,10 +209,12 @@ class CompositePatchifiedMNIST(Dataset):
 
                     img.paste(digit_img, (x, y))
                     labels.append(label)
-            # TODO Else show error
 
-            tensor_img = self.transform(img)  # (1, H, W)
-            patches = patchify(tensor_img, self.patch_size)  # (num_patches, patch_dim)
+            else:
+                raise ValueError(f"Unknown placement mode: {self.placement}")
+
+            tensor_img = self.transform(img)
+            patches = patchify(tensor_img, self.patch_size)
             samples.append((patches, torch.tensor(labels)))
 
         return samples
@@ -197,6 +224,36 @@ class CompositePatchifiedMNIST(Dataset):
 
     def __getitem__(self, idx):
         return self.samples[idx]
+
+
+class NumberScribblesDataset(Dataset):
+    """
+    Custom dataset for hand-drawn number grids saved as PNGs.
+    Filenames encode the ground truth sequence with underscores for blanks.
+    """
+    def __init__(self, source_dir, patch_size=14, transform=None):
+        self.source_dir = source_dir
+        self.patch_size = patch_size
+        self.transform = transform if transform else transforms.ToTensor()
+        self.files = [f for f in os.listdir(source_dir) if f.endswith('.png')]
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        file = self.files[idx]
+        img_path = os.path.join(self.source_dir, file)
+        img = Image.open(img_path).convert('L')  # (H, W)
+
+        tensor_img = self.transform(img).unsqueeze(0) if img.mode != 'L' else self.transform(img)
+        patches = patchify(tensor_img, self.patch_size)
+
+        # Parse filename: remove underscores, extract digits
+        base = os.path.splitext(file)[0]
+        label_str = base.replace('_', '')
+        label = torch.tensor([int(ch) for ch in label_str], dtype=torch.long)
+
+        return patches, label
 
 
 def padded_collate_fn(batch):
@@ -223,10 +280,10 @@ def padded_collate_fn(batch):
     return inputs, targets
 
 
-def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_size=14,
-                            seed=42, num_workers=2, composite_mode=False,
-                            canvas_size=(56, 56), grid_rows=2, grid_cols=2, num_digits=4, placement='grid',
-                            num_digits_range=None, num_images=10000, num_images_test=2000):
+def load_mnist_dataloaders(cache_dir, dataset_name=None, source_dir=None, batch_size=64, valid_fraction=0.2, patch_size=14,
+                           seed=42, num_workers=2, composite_mode=False,
+                           canvas_size=(56, 56), grid_rows=2, grid_cols=2, num_digits=4, placement='grid',
+                           num_digits_range=None, num_images=10000, num_images_test=2000):
 
     # TODO Do not hardcode these parameters
     transform = transforms.Compose([
@@ -234,36 +291,49 @@ def load_mnist_dataloaders(cache_dir, batch_size=64, valid_fraction=0.2, patch_s
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    if composite_mode:
-        full_dataset = CompositePatchifiedMNIST(
-            root=cache_dir,
-            train=True,
-            download=True,
-            transform=transform,
-            canvas_size=canvas_size,
-            grid_rows = grid_rows,
-            grid_cols = grid_cols,
-            num_digits=num_digits,
-            placement=placement,
-            num_digits_range=num_digits_range,
-            num_images=num_images
+    if dataset_name and dataset_name == 'number-scribbles':
+        full_dataset = NumberScribblesDataset(
+            source_dir=source_dir,
+            patch_size=patch_size,
+            transform=transform
         )
-        test_dataset = CompositePatchifiedMNIST(
-            root=cache_dir,
-            train=False,
-            download=True,
-            transform=transform,
-            canvas_size=canvas_size,
-            grid_rows = grid_rows,
-            grid_cols = grid_cols,
-            num_digits=num_digits,
-            placement=placement,
-            num_digits_range=num_digits_range,
-            num_images=num_images_test
+        # TODO Use a different dataset for testing
+        test_dataset = NumberScribblesDataset(
+            source_dir=source_dir,
+            patch_size=patch_size,
+            transform=transform
         )
     else:
-        full_dataset = PatchifiedMNIST(root=cache_dir, train=True, download=True, patch_size=patch_size, transform=transform)
-        test_dataset = PatchifiedMNIST(root=cache_dir, train=False, download=True, patch_size=patch_size, transform=transform)
+        if composite_mode:
+            full_dataset = CompositePatchifiedMNIST(
+                root=cache_dir,
+                train=True,
+                download=True,
+                transform=transform,
+                canvas_size=canvas_size,
+                grid_rows = grid_rows,
+                grid_cols = grid_cols,
+                num_digits=num_digits,
+                placement=placement,
+                num_digits_range=num_digits_range,
+                num_images=num_images
+            )
+            test_dataset = CompositePatchifiedMNIST(
+                root=cache_dir,
+                train=False,
+                download=True,
+                transform=transform,
+                canvas_size=canvas_size,
+                grid_rows = grid_rows,
+                grid_cols = grid_cols,
+                num_digits=num_digits,
+                placement=placement,
+                num_digits_range=num_digits_range,
+                num_images=num_images_test
+            )
+        else:
+            full_dataset = PatchifiedMNIST(root=cache_dir, train=True, download=True, patch_size=patch_size, transform=transform)
+            test_dataset = PatchifiedMNIST(root=cache_dir, train=False, download=True, patch_size=patch_size, transform=transform)
 
     valid_size = int(valid_fraction * len(full_dataset))
     train_size = len(full_dataset) - valid_size
