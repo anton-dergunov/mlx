@@ -122,7 +122,7 @@ loader = DataLoader(
 optimizer = torch.optim.AdamW(model.mapping.parameters(), lr=1e-4)
 model.gpt2_model.train()
 
-EPOCHS = 5
+EPOCHS = 50
 
 for epoch in range(EPOCHS):
     print(f"\nEpoch {epoch+1}/{EPOCHS}")
@@ -151,7 +151,7 @@ print("Done!")
 
 model.eval()
 with torch.no_grad():
-    for i in range(50):
+    for i in range(10):
         example = dataset[i]
         image = example["image"]
         print("Actual captions:")
