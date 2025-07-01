@@ -151,7 +151,7 @@ print("Done!")
 
 model.eval()
 with torch.no_grad():
-    for i in range(10):
+    for i in range(50):
         example = dataset[i]
         image = example["image"]
         print("Actual captions:")
