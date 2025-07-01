@@ -122,7 +122,7 @@ loader = DataLoader(
 optimizer = torch.optim.AdamW(model.mapping.parameters(), lr=1e-4)
 model.gpt2_model.train()
 
-EPOCHS = 1
+EPOCHS = 5
 
 for epoch in range(EPOCHS):
     print(f"\nEpoch {epoch+1}/{EPOCHS}")
@@ -151,22 +151,28 @@ print("Done!")
 
 model.eval()
 with torch.no_grad():
-    example = dataset[0]
-    image = example["image"]
+    for i in range(10):
+        example = dataset[i]
+        image = example["image"]
+        print("Actual captions:")
+        for caption in example["caption"]:
+            print(caption)
 
-    clip_inputs = model.clip_processor(images=image, return_tensors="pt").to(DEVICE)
-    image_embed = model.clip_model.get_image_features(**clip_inputs)
-    prefix = model.mapping(image_embed).view(-1, PREFIX_LEN, EMBED_DIM)
+        clip_inputs = model.clip_processor(images=image, return_tensors="pt").to(DEVICE)
+        image_embed = model.clip_model.get_image_features(**clip_inputs)
+        prefix = model.mapping(image_embed).view(-1, PREFIX_LEN, EMBED_DIM)
 
-    generated = torch.tensor([[tokenizer.bos_token_id]], device=DEVICE)
-    generated_embeds = model.gpt2_model.transformer.wte(generated)
-
-    for _ in range(20):
-        inputs_embeds = torch.cat((prefix, generated_embeds), dim=1)
-        outputs = model.gpt2_model(inputs_embeds=inputs_embeds)
-        next_token_logits = outputs.logits[:, -1, :]
-        next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
-        generated = torch.cat((generated, next_token), dim=1)
+        generated = torch.tensor([[tokenizer.bos_token_id]], device=DEVICE)
         generated_embeds = model.gpt2_model.transformer.wte(generated)
 
-    print(tokenizer.decode(generated[0]))
+        for _ in range(20):
+            inputs_embeds = torch.cat((prefix, generated_embeds), dim=1)
+            outputs = model.gpt2_model(inputs_embeds=inputs_embeds)
+            next_token_logits = outputs.logits[:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
+            generated = torch.cat((generated, next_token), dim=1)
+            generated_embeds = model.gpt2_model.transformer.wte(generated)
+
+        print("Generated caption:")
+        print(tokenizer.decode(generated[0]))
+        print()
