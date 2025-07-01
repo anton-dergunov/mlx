@@ -4,11 +4,14 @@ from torch.utils.data import DataLoader
 from transformers import CLIPProcessor, CLIPModel, GPT2Tokenizer, GPT2LMHeadModel
 from datasets import load_dataset
 from utils import get_device
+from tqdm import tqdm
 
 # -----------------------------------
 # Config
 # -----------------------------------
 DEVICE = get_device()
+print(f"Device: {DEVICE}")
+
 CLIP_NAME = "openai/clip-vit-base-patch32"
 GPT2_NAME = "distilgpt2"  # Smaller than GPT2
 
@@ -30,7 +33,7 @@ class ImageCaptioningModel(nn.Module):
 
         # MLP to map image embedding -> prefix tokens
         self.prefix_len = PREFIX_LEN
-        clip_dim = self.clip_model.config.projection_dim  # typically 512
+        clip_dim = self.clip_model.config.projection_dim  # 512 for CLIP-ViT-B/32
         self.mapping = nn.Sequential(
             nn.Linear(clip_dim, EMBED_DIM * PREFIX_LEN),
             nn.Tanh()
@@ -55,17 +58,24 @@ class ImageCaptioningModel(nn.Module):
 
         # 4) Concatenate prefix + caption
         inputs_embeds = torch.cat((prefix, caption_embeds), dim=1)
+        B, prefix_seq, _ = prefix.shape
 
         # 5) Adjust attention mask
         B = captions_attention_mask.size(0)
         prefix_attention_mask = torch.ones(B, self.prefix_len).to(DEVICE)
         attention_mask = torch.cat((prefix_attention_mask, captions_attention_mask), dim=1)
 
+        # FIXME Do this in collate
+        # Fix: labels must be same length as inputs_embeds
+        # So we pad labels with -100 for prefix part
+        pad_labels = torch.full((B, prefix_seq), -100).to(DEVICE)  # -100 means ignore in loss
+        labels = torch.cat((pad_labels, captions_input_ids), dim=1)
+
         # 6) Pass through GPT-2
         outputs = self.gpt2_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            labels=captions_input_ids  # GPT2 will shift labels internally
+            labels=labels
         )
         return outputs
 
@@ -115,7 +125,10 @@ model.gpt2_model.train()
 EPOCHS = 1
 
 for epoch in range(EPOCHS):
-    for images, input_ids, attention_mask in loader:
+    print(f"\nEpoch {epoch+1}/{EPOCHS}")
+    total_loss = 0
+
+    for images, input_ids, attention_mask in tqdm(loader, desc="Training"):
         input_ids = input_ids.to(DEVICE)
         attention_mask = attention_mask.to(DEVICE)
 
@@ -126,7 +139,9 @@ for epoch in range(EPOCHS):
         loss.backward()
         optimizer.step()
 
-        print(f"Loss: {loss.item():.4f}")
+        total_loss += loss.item()
+
+    print(f"Train loss: {total_loss / len(loader):.4f}")
 
 print("Done!")
 
