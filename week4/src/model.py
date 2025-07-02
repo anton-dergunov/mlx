@@ -1,13 +1,8 @@
 import torch
 import torch.nn as nn
-import math
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from transformers import CLIPProcessor, CLIPModel, GPT2Tokenizer, GPT2LMHeadModel
-from datasets import load_dataset
-from utils import get_device
-from tqdm import tqdm
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
 
 
 PREFIX_LEN = 5  # number of prefix tokens
@@ -37,6 +32,7 @@ class ImageCaptioningModel(nn.Module):
         self.gpt2_tokenizer = GPT2Tokenizer.from_pretrained(GPT2_NAME)
         self.gpt2_tokenizer.pad_token = self.gpt2_tokenizer.eos_token
         self.gpt2_model = GPT2LMHeadModel.from_pretrained(GPT2_NAME)
+        self.gpt2_model.loss_type = "ForCausalLM"
 
     def forward(self, image_embed, caption_ids, captions_attention_mask):
         B = image_embed.size(0)
@@ -83,10 +79,14 @@ class ImageCaptioningModel(nn.Module):
         # Concatenate prefix + caption
         inputs_embeds = torch.cat([prefix, bos_embeds], dim=1)
 
+        attention_mask = torch.ones(inputs_embeds.shape[:2]).to(image_embed.device)
+
         generated = self.gpt2_model.generate(
             inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
             max_length=50,  # FIXME don't hardcode it
-            eos_token_id=self.gpt2_tokenizer.eos_token_id
+            eos_token_id=self.gpt2_tokenizer.eos_token_id,
+            pad_token_id=self.gpt2_tokenizer.eos_token_id
         )
 
         return generated

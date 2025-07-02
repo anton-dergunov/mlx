@@ -7,7 +7,7 @@ dataset:
 model:
   embed_dim: None
 
-  save_path_base: "/Users/anton/mlx/src/week3/models/model"
+  save_path_base: "/Users/anton/mlx/src/week4/models/model"
 
 train:
   epochs: 1
@@ -18,5 +18,3 @@ log:
   wandb: false
   project: "image_captions"
   run_name: "test"
-
-

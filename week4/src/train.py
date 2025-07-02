@@ -1,8 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from tqdm import tqdm
 import wandb
+
+
+SMOOTHIE = SmoothingFunction().method4
 
 
 def train_one_epoch(model, dataloader, optimizer, device):
@@ -29,6 +33,10 @@ def train_one_epoch(model, dataloader, optimizer, device):
 def eval_one_epoch(model, dataloader, device, num_examples=5):
     model.eval()
     total_loss = 0
+    bleu_scores = []
+    all_outputs = []
+
+    example_count = 0
 
     with torch.no_grad():
         for images, input_ids, attention_mask in tqdm(dataloader, desc="Validating"):
@@ -36,17 +44,42 @@ def eval_one_epoch(model, dataloader, device, num_examples=5):
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
 
-            generated = model.generate(images)
-            for input_id_seq, generated_seq in zip(input_ids.tolist(), generated.tolist()):
-                actual_text = model.tokenizer.decode(input_id_seq, skip_special_tokens=True)
-                generated_text = model.tokenizer.decode(generated_seq, skip_special_tokens=True)
-                print(f"Actual: {actual_text}")
-                print(f"Generated: {generated_text}")
-            break
-            
-            # FIXME Actually compute the metrics
+            # === Compute the token-level loss ===
+            outputs = model(images, input_ids, attention_mask)
+            loss = outputs.loss
+            total_loss += loss.item()
 
-    return total_loss  # FIXME
+            # === Generate captions ===
+            generated_seqs = model.generate(images)
+
+            for input_id_seq, generated_seq in zip(input_ids.tolist(), generated_seqs.tolist()):
+                actual_text = model.gpt2_tokenizer.decode(input_id_seq, skip_special_tokens=True)
+                generated_text = model.gpt2_tokenizer.decode(generated_seq, skip_special_tokens=True)
+
+                # === Compute BLEU ===
+                ref_tokens = actual_text.split()
+                gen_tokens = generated_text.split()
+                bleu = sentence_bleu([ref_tokens], gen_tokens, smoothing_function=SMOOTHIE)
+                bleu_scores.append(bleu)
+
+                # === Collect examples to print ===
+                if example_count < num_examples:
+                    print("\n=== Example ===")
+                    print(f"Reference: {actual_text}")
+                    print(f"Generated: {generated_text}")
+                    example_count += 1
+
+                # === For possible later use ===
+                all_outputs.append({
+                    "reference": actual_text,
+                    "generated": generated_text,
+                    "bleu": bleu
+                })
+
+    avg_loss = total_loss / len(dataloader)
+    avg_bleu = sum(bleu_scores) / len(bleu_scores)
+
+    return avg_loss, avg_bleu, all_outputs
 
 
 def train_loop(train_loader, val_loader, device, model,
@@ -65,8 +98,8 @@ def train_loop(train_loader, val_loader, device, model,
         train_loss = train_one_epoch(model, train_loader, optimizer, device)
         print(f"Train Loss: {train_loss:.4f}")
 
-        val_loss = eval_one_epoch(model, val_loader, device)
-        print(f"Val   Loss: {val_loss:.4f}")
+        val_loss, val_bleu, _ = eval_one_epoch(model, val_loader, device)
+        print(f"\nValidation loss: {val_loss:.4f} | Average BLEU: {val_bleu:.4f}")
 
         if log_wandb:
             wandb.log({

@@ -9,3 +9,4 @@ qwen_vl_utils
 omegaconf
 transformers
 datasets
+nltk
