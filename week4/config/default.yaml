@@ -1,0 +1,22 @@
+dataset:
+  batch_size: 4
+  valid_fraction: 0.2
+  num_workers: 8
+  cache_dir: "/Users/anton/experiment_data/datasets/flickr50k"
+
+model:
+  embed_dim: None
+
+  save_path_base: "/Users/anton/mlx/src/week3/models/model"
+
+train:
+  epochs: 1
+  lr: 0.0003
+  seed: 42
+
+log:
+  wandb: false
+  project: "image_captions"
+  run_name: "test"
+
+
