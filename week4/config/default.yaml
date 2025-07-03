@@ -10,7 +10,7 @@ model:
   save_path_base: "/Users/anton/mlx/src/week4/models/model"
 
 train:
-  epochs: 1
+  epochs: 5
   lr: 0.0003
   seed: 42
 

@@ -36,26 +36,28 @@ class ImageCaptioningModel(nn.Module):
 
     def forward(self, image_embed, caption_ids, captions_attention_mask):
         B = image_embed.size(0)
+        device = image_embed.device
 
         # Map CLIP image embed -> prefix
         prefix = self.mapping(image_embed).view(B, self.prefix_len, EMBED_DIM)
 
-        # Add BOS
-        bos = torch.tensor([[self.gpt2_tokenizer.bos_token_id]] * B).to(image_embed.device)
-        caption_input = torch.cat([bos, caption_ids], dim=1)  # shift right
+        bos = torch.full((B, 1), self.gpt2_tokenizer.bos_token_id).to(device)
+        eos = torch.full((B, 1), self.gpt2_tokenizer.eos_token_id).to(device)
 
-        # Embed text
+        # INPUT: prefix + BOS + text + EOS
+        caption_input = torch.cat([bos, caption_ids, eos], dim=1)
         caption_embeds = self.gpt2_model.transformer.wte(caption_input)
-
-        # Concatenate prefix + caption
         inputs_embeds = torch.cat([prefix, caption_embeds], dim=1)
 
-        # Labels: prefix is ignored, BOS to EOS are real targets
-        ignore = torch.full((B, self.prefix_len), -100).to(image_embed.device)
-        labels = torch.cat([ignore, caption_ids, bos], dim=1)
+        # LABELS: ignore prefix and BOS + text + EOS (labels are shifted inside the model)
+        # (see https://github.com/huggingface/transformers/blob/b31e9d19a6607aafdd921bc592897900712ba61d/src/transformers/models/gpt2/modeling_gpt2.py#L1339)
+        ignore = torch.full((B, self.prefix_len + 1), -100).to(device)
+        labels = torch.cat([ignore, caption_ids, eos], dim=1)
 
-        prefix_attention_mask = torch.ones(B, self.prefix_len + 1).to(image_embed.device)
-        attention_mask = torch.cat((prefix_attention_mask, captions_attention_mask), dim=1)
+        # ATTENTION MASK: ones for prefix + BOS + text + EOS
+        prefix_attention_mask = torch.ones(B, self.prefix_len + 1).to(device)
+        attention_mask = torch.cat([prefix_attention_mask, captions_attention_mask], dim=1)
+        attention_mask = torch.cat([attention_mask, torch.ones(B, 1).to(device)], dim=1)
 
         outputs = self.gpt2_model(
             inputs_embeds=inputs_embeds,

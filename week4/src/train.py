@@ -9,11 +9,12 @@ import wandb
 SMOOTHIE = SmoothingFunction().method4
 
 
-def train_one_epoch(model, dataloader, optimizer, device):
+def train_one_epoch(model, dataloader, optimizer, device, log_every=50):
     model.train()
     total_loss = 0
+    running_loss = 0
 
-    for images, input_ids, attention_mask in tqdm(dataloader, desc="Training"):
+    for step, (images, input_ids, attention_mask) in enumerate(tqdm(dataloader, desc="Training"), 1):
         images = images.to(device)
         input_ids = input_ids.to(device)
         attention_mask = attention_mask.to(device)
@@ -26,8 +27,29 @@ def train_one_epoch(model, dataloader, optimizer, device):
         optimizer.step()
 
         total_loss += loss.item()
+        running_loss += loss.item()
 
-    return total_loss / len(dataloader)
+        if step % log_every == 0:
+            avg_running_loss = running_loss / log_every
+            print(f"\nStep {step}: Running Avg Loss: {avg_running_loss:.4f}")
+
+            # Pick the first sample from this batch
+            single_image = images[0:1]
+            single_input_id = input_ids[0]
+            with torch.no_grad():
+                generated_seq = model.generate(single_image)
+            
+            actual_text = model.gpt2_tokenizer.decode(single_input_id, skip_special_tokens=True)
+            generated_text = model.gpt2_tokenizer.decode(generated_seq[0], skip_special_tokens=True)
+
+            print(f"=== Sample ===")
+            print(f"Reference: {actual_text}")
+            print(f"Generated: {generated_text}")
+
+            running_loss = 0  # Reset running loss window
+
+    avg_loss = total_loss / len(dataloader)
+    return avg_loss
 
 
 def eval_one_epoch(model, dataloader, device, num_examples=5):
