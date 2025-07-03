@@ -42,8 +42,8 @@ def train_one_epoch(model, dataloader, optimizer, device, log_every=10):
             with torch.no_grad():
                 generated_seq = model.generate(single_image)
 
-            actual_text = model.gpt2_tokenizer.decode(single_input_id, skip_special_tokens=True)
-            generated_text = model.gpt2_tokenizer.decode(generated_seq[0], skip_special_tokens=True)
+            actual_text = model.tokenizer.decode(single_input_id, skip_special_tokens=True)
+            generated_text = model.tokenizer.decode(generated_seq[0], skip_special_tokens=True)
 
             tqdm.write(f"Reference: {actual_text}")
             tqdm.write(f"Generated: {generated_text}")
@@ -77,8 +77,8 @@ def eval_one_epoch(model, dataloader, device, num_examples=5):
             generated_seqs = model.generate(images)
 
             for input_id_seq, generated_seq in zip(input_ids.tolist(), generated_seqs.tolist()):
-                actual_text = model.gpt2_tokenizer.decode(input_id_seq, skip_special_tokens=True)
-                generated_text = model.gpt2_tokenizer.decode(generated_seq, skip_special_tokens=True)
+                actual_text = model.tokenizer.decode(input_id_seq, skip_special_tokens=True)
+                generated_text = model.tokenizer.decode(generated_seq, skip_special_tokens=True)
 
                 # === Compute BLEU ===
                 ref_tokens = actual_text.split()

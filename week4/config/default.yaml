@@ -5,7 +5,8 @@ dataset:
   cache_dir: "/Users/anton/experiment_data/datasets/flickr50k"
 
 model:
-  embed_dim: None
+  decoder: "gpt2"  # "qwen", "gpt2" or "custom"
+  finetune_decoder: true
 
   save_path_base: "/Users/anton/mlx/src/week4/models/model"
 

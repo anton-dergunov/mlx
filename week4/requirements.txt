@@ -11,3 +11,4 @@ transformers
 datasets
 nltk
 wandb
+peft
