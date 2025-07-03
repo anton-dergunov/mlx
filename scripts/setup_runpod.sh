@@ -127,10 +127,17 @@ print_step 3 "Creating & activating Python venv..."
 # source ~/venv/bin/activate
 
 print_step 4 "Installing Python dependencies"
-# pip install --upgrade pip
-# pip install ipykernel notebook jupyterlab ipywidgets
 pip install --upgrade pip
 pip install --ignore-installed ipykernel notebook jupyterlab ipywidgets
+
+print_step 5 "Upgrading PyTorch"
+pip install torch -U
+pip install torchvision -U
+
+print_step 6 "Installing VIM and nvtop"
+apt update
+apt install vim -y
+apt install nvtop -y
 
 echo
 echo "✅ Remote environment setup complete!"
