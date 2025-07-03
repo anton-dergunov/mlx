@@ -13,6 +13,7 @@ train:
   epochs: 5
   lr: 0.0003
   seed: 42
+  log_every: 50
 
 log:
   wandb: false

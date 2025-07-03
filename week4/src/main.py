@@ -34,6 +34,7 @@ def main_internal(cfg):
         model,
         cfg.train.epochs,
         cfg.train.lr,
+        cfg.train.log_every,
         log_wandb=cfg.log.wandb)
 
     # Save the trained model locally

@@ -9,7 +9,7 @@ import wandb
 SMOOTHIE = SmoothingFunction().method4
 
 
-def train_one_epoch(model, dataloader, optimizer, device, log_every=50):
+def train_one_epoch(model, dataloader, optimizer, device, log_every=10):
     model.train()
     total_loss = 0
     running_loss = 0
@@ -31,22 +31,22 @@ def train_one_epoch(model, dataloader, optimizer, device, log_every=50):
 
         if step % log_every == 0:
             avg_running_loss = running_loss / log_every
-            print(f"\nStep {step}: Running Avg Loss: {avg_running_loss:.4f}")
+
+            tqdm.write(f"\n[Step {step}] Running Avg Loss: {avg_running_loss:.4f}")
 
             # Pick the first sample from this batch
             single_image = images[0:1]
             single_input_id = input_ids[0]
             with torch.no_grad():
                 generated_seq = model.generate(single_image)
-            
+
             actual_text = model.gpt2_tokenizer.decode(single_input_id, skip_special_tokens=True)
             generated_text = model.gpt2_tokenizer.decode(generated_seq[0], skip_special_tokens=True)
 
-            print(f"=== Sample ===")
-            print(f"Reference: {actual_text}")
-            print(f"Generated: {generated_text}")
+            tqdm.write(f"Reference: {actual_text}")
+            tqdm.write(f"Generated: {generated_text}")
 
-            running_loss = 0  # Reset running loss window
+            running_loss = 0  # Reset window
 
     avg_loss = total_loss / len(dataloader)
     return avg_loss
@@ -105,7 +105,7 @@ def eval_one_epoch(model, dataloader, device, num_examples=5):
 
 
 def train_loop(train_loader, val_loader, device, model,
-               num_epochs=10, lr=3e-4, log_wandb=True):
+               num_epochs=10, lr=3e-4, log_every=50, log_wandb=True):
 
     model.to(device)
     # optimizer = optim.AdamW(model.parameters(), lr=lr)
