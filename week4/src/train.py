@@ -4,6 +4,8 @@ import torch.optim as optim
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from tqdm import tqdm
 import wandb
+import datetime
+import os
 
 
 SMOOTHIE = SmoothingFunction().method4
@@ -105,11 +107,11 @@ def eval_one_epoch(model, dataloader, device, num_examples=5):
 
 
 def train_loop(train_loader, val_loader, device, model,
-               num_epochs=10, lr=3e-4, log_every=50, log_wandb=True):
+               num_epochs=10, lr=3e-4, log_every=50, save_path_base=None, log_wandb=True):
 
     model.to(device)
-    # optimizer = optim.AdamW(model.parameters(), lr=lr)
-    optimizer = optim.AdamW(model.mapping.parameters(), lr=lr)
+    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    # optimizer = optim.AdamW(model.mapping.parameters(), lr=lr)
 
     if log_wandb:
         wandb.watch(model, log_freq=10)
@@ -117,8 +119,16 @@ def train_loop(train_loader, val_loader, device, model,
     for epoch in range(1, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
 
-        train_loss = train_one_epoch(model, train_loader, optimizer, device)
+        train_loss = train_one_epoch(model, train_loader, optimizer, device, log_every)
         print(f"Train Loss: {train_loss:.4f}")
+
+        if save_path_base:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dynamic_path = f"{save_path_base}_{timestamp}_checkpoint.pt"
+
+            os.makedirs(os.path.dirname(dynamic_path), exist_ok=True)
+            torch.save(model.state_dict(), dynamic_path)
+            print(f"Model saved to {dynamic_path}")
 
         val_loss, val_bleu, _ = eval_one_epoch(model, val_loader, device)
         print(f"\nValidation loss: {val_loss:.4f} | Average BLEU: {val_bleu:.4f}")

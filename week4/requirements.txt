@@ -10,3 +10,4 @@ omegaconf
 transformers
 datasets
 nltk
+wandb

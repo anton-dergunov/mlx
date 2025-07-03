@@ -35,6 +35,7 @@ def main_internal(cfg):
         cfg.train.epochs,
         cfg.train.lr,
         cfg.train.log_every,
+        cfg.model.save_path_base,
         log_wandb=cfg.log.wandb)
 
     # Save the trained model locally
@@ -42,7 +43,7 @@ def main_internal(cfg):
         run_id = wandb.run.id if cfg.log.wandb else "local"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base = cfg.model.save_path_base
-        dynamic_path = f"{base}_{timestamp}_{run_id}.pt"
+        dynamic_path = f"{base}_{timestamp}_{run_id}_final.pt"
 
         os.makedirs(os.path.dirname(dynamic_path), exist_ok=True)
         torch.save(model.state_dict(), dynamic_path)
