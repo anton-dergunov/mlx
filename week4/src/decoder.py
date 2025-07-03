@@ -173,7 +173,10 @@ class TransformerDecoder(nn.Module):
         output = self.output_proj(x)  # (B, T, vocab_size)
 
         loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
-        loss = loss_fn(output.view(-1, output.size(-1)), labels.view(-1))
+        # Shift labels left by one for next-token prediction (like Hugging Face)
+        shifted_labels = labels[:, 1:].contiguous()
+        output_for_loss = output[:, :-1, :].contiguous()
+        loss = loss_fn(output_for_loss.view(-1, output_for_loss.size(-1)), shifted_labels.view(-1))
 
         return CausalLMOutput(logits=output, loss=loss)
 
