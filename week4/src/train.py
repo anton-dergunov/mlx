@@ -4,7 +4,7 @@ import torch.optim as optim
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from tqdm import tqdm
 import wandb
-import datetime
+from datetime import datetime
 import os
 
 
