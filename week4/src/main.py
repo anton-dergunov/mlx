@@ -25,6 +25,8 @@ def main_internal(cfg):
         cfg.dataset.batch_size,
         cfg.dataset.num_workers)
 
+    # FIXME Cache by the parameter values
+
     # TODO Expose hyperparameters of the model
     model = ImageCaptioningModel(
         decoder_type=cfg.model.decoder)

@@ -52,6 +52,7 @@ class ImageCaptioningModel(nn.Module):
             self.tokenizer = AutoTokenizer.from_pretrained(QWEN_NAME)
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.bos_token = self.tokenizer.eos_token
+            self.tokenizer.bos_token = self.tokenizer.eos_token
 
             base_model = AutoModelForCausalLM.from_pretrained(QWEN_NAME, torch_dtype=torch.float16)
             base_model.resize_token_embeddings(len(self.tokenizer))  # required after adding PAD token
@@ -86,6 +87,8 @@ class ImageCaptioningModel(nn.Module):
 
         # Map CLIP image embed -> prefix
         prefix = self.mapping(image_embed).view(B, self.prefix_len, self.embed_dim)
+        if self.decoder_type == "qwen":
+            prefix = prefix.half()  # cast to float16
 
         bos = torch.full((B, 1), self.tokenizer.bos_token_id).to(device)
         eos = torch.full((B, 1), self.tokenizer.eos_token_id).to(device)
@@ -118,6 +121,8 @@ class ImageCaptioningModel(nn.Module):
 
         # Map CLIP image embed -> prefix
         prefix = self.mapping(image_embed).view(B, self.prefix_len, self.embed_dim)
+        if self.decoder_type == "qwen":
+            prefix = prefix.half()  # cast to float16
 
         # Add BOS and embed
         bos = torch.tensor([[self.tokenizer.bos_token_id]] * B).to(device)
