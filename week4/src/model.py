@@ -29,11 +29,12 @@ class ImageCaptioningModel(nn.Module):
             self.lm.loss_type = "ForCausalLM"
     
         elif decoder_type == "qwen":
-            self.embed_dim = 4096  # Qwen hidden dim
+            self.embed_dim = 1024  # Qwen hidden dim
             gpt_name = "Qwen/Qwen3-0.6B-Base"
 
             self.tokenizer = AutoTokenizer.from_pretrained(gpt_name)
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.bos_token = self.tokenizer.eos_token
 
             base_model = AutoModelForCausalLM.from_pretrained(gpt_name, torch_dtype=torch.float16)
             base_model.resize_token_embeddings(len(self.tokenizer))  # required after adding PAD token
@@ -72,13 +73,18 @@ class ImageCaptioningModel(nn.Module):
 
         # Map CLIP image embed -> prefix
         prefix = self.mapping(image_embed).view(B, self.prefix_len, self.embed_dim)
+        if self.decoder_type == "qwen":
+            prefix = prefix.half()  # cast to float16
 
         bos = torch.full((B, 1), self.tokenizer.bos_token_id).to(device)
         eos = torch.full((B, 1), self.tokenizer.eos_token_id).to(device)
 
         # INPUT: prefix + BOS + text + EOS
         caption_input = torch.cat([bos, caption_ids, eos], dim=1)
-        caption_embeds = self.lm.transformer.wte(caption_input) if self.decoder_type != "qwen" else self.lm.model.embed_tokens(caption_input)
+        if self.decoder_type == "qwen":
+            caption_embeds = self.lm.base_model.model.model.embed_tokens(caption_input)
+        else:
+            caption_embeds = self.lm.transformer.wte(caption_input)
         inputs_embeds = torch.cat([prefix, caption_embeds], dim=1)
 
         # LABELS: ignore prefix and BOS + text + EOS (labels are shifted inside the model)
@@ -104,10 +110,16 @@ class ImageCaptioningModel(nn.Module):
 
         # Map CLIP image embed -> prefix
         prefix = self.mapping(image_embed).view(B, self.prefix_len, self.embed_dim)
+        if self.decoder_type == "qwen":
+            prefix = prefix.half()  # cast to float16
 
         # Add BOS and embed
         bos = torch.tensor([[self.tokenizer.bos_token_id]] * B).to(device)
-        bos_embeds = self.lm.transformer.wte(bos) if self.decoder_type != "qwen" else self.lm.model.embed_tokens(bos)
+
+        if self.decoder_type == "qwen":
+            bos_embeds = self.lm.base_model.model.model.embed_tokens(bos)
+        else:
+            bos_embeds = self.lm.transformer.wte(bos)
 
         # Concatenate prefix + caption
         inputs_embeds = torch.cat([prefix, bos_embeds], dim=1)

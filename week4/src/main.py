@@ -25,7 +25,8 @@ def main_internal(cfg):
         cfg.dataset.num_workers)
 
     # TODO Expose hyperparameters of the model
-    model = ImageCaptioningModel()
+    model = ImageCaptioningModel(
+        decoder_type=cfg.model.decoder)
 
     train_loop(
         train_loader,
