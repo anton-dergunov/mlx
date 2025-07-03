@@ -5,8 +5,12 @@ import torch.nn as nn
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AutoTokenizer, AutoModelForCausalLM
 from peft import get_peft_model, LoraConfig, TaskType
 
+from decoder import TransformerDecoder
+
 
 PREFIX_LEN = 5  # number of prefix tokens
+GPT2_NAME = "distilgpt2"  # Smaller than GPT2
+QWEN_NAME = "Qwen/Qwen3-0.6B-Base"
 
 
 # -----------------------------------
@@ -20,22 +24,36 @@ class ImageCaptioningModel(nn.Module):
         self.decoder_type = decoder_type
         if decoder_type == "gpt2":
             self.embed_dim = 768  # GPT-2 hidden size for distilgpt2
-            gpt_name = "distilgpt2"
 
-            self.tokenizer = GPT2Tokenizer.from_pretrained(gpt_name)
+            self.tokenizer = GPT2Tokenizer.from_pretrained(GPT2_NAME)
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            self.lm = GPT2LMHeadModel.from_pretrained(gpt_name)
+            self.lm = GPT2LMHeadModel.from_pretrained(GPT2_NAME)
             self.lm.loss_type = "ForCausalLM"
     
-        elif decoder_type == "qwen":
-            self.embed_dim = 4096  # Qwen hidden dim
-            gpt_name = "Qwen/Qwen3-0.6B-Base"
+        elif decoder_type == "custom":
+            self.embed_dim = 768  # Same as GPT-2
 
-            self.tokenizer = AutoTokenizer.from_pretrained(gpt_name)
+            # Reuse tokenizer and embeddings from DistilGPT2
+            self.tokenizer = GPT2Tokenizer.from_pretrained(GPT2_NAME)
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            gpt2_model = GPT2LMHeadModel.from_pretrained(GPT2_NAME)
+            pretrained_embed = gpt2_model.transformer.wte.weight.data
 
-            base_model = AutoModelForCausalLM.from_pretrained(gpt_name, torch_dtype=torch.float16)
+            self.lm = TransformerDecoder(
+                 vocab_size=len(self.tokenizer),
+                 pretrained_embed=pretrained_embed,
+                 embed_dim=self.embed_dim  # TODO Read this and other parameters from config
+            )
+
+        elif decoder_type == "qwen":
+            self.embed_dim = 1024  # Qwen hidden dim
+
+            self.tokenizer = AutoTokenizer.from_pretrained(QWEN_NAME)
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.bos_token = self.tokenizer.eos_token
+
+            base_model = AutoModelForCausalLM.from_pretrained(QWEN_NAME, torch_dtype=torch.float16)
             base_model.resize_token_embeddings(len(self.tokenizer))  # required after adding PAD token
 
             # TODO Expose the params in the config
@@ -50,10 +68,6 @@ class ImageCaptioningModel(nn.Module):
 
             self.lm = get_peft_model(base_model, lora_config)
             self.lm.print_trainable_parameters()  # FIXME print for other models as well
-
-        elif decoder_type == "custom":
-            self.embed_dim = None  # FIXME
-            pass
 
         else:
             raise NotImplementedError(f"Unsupported decoder: {decoder_type}")
@@ -78,7 +92,7 @@ class ImageCaptioningModel(nn.Module):
 
         # INPUT: prefix + BOS + text + EOS
         caption_input = torch.cat([bos, caption_ids, eos], dim=1)
-        caption_embeds = self.lm.transformer.wte(caption_input) if self.decoder_type != "qwen" else self.lm.model.embed_tokens(caption_input)
+        caption_embeds = self._embed_tokens(caption_input)
         inputs_embeds = torch.cat([prefix, caption_embeds], dim=1)
 
         # LABELS: ignore prefix and BOS + text + EOS (labels are shifted inside the model)
@@ -107,9 +121,9 @@ class ImageCaptioningModel(nn.Module):
 
         # Add BOS and embed
         bos = torch.tensor([[self.tokenizer.bos_token_id]] * B).to(device)
-        bos_embeds = self.lm.transformer.wte(bos) if self.decoder_type != "qwen" else self.lm.model.embed_tokens(bos)
+        bos_embeds = self._embed_tokens(bos)
 
-        # Concatenate prefix + caption
+        # Concatenate prefix + BOS
         inputs_embeds = torch.cat([prefix, bos_embeds], dim=1)
 
         attention_mask = torch.ones(inputs_embeds.shape[:2]).to(device)
@@ -117,9 +131,23 @@ class ImageCaptioningModel(nn.Module):
         generated = self.lm.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            max_length=50,  # FIXME don't hardcode it
+            max_new_tokens=50,  # FIXME don't hardcode it
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.eos_token_id
         )
 
         return generated
+    
+    def _embed_tokens(self, tokens):
+        if self.decoder_type == "gpt2":
+            return self.lm.transformer.wte(tokens)
+    
+        elif self.decoder_type == "custom":
+            return self.lm.embed_tokens(tokens)
+
+        elif self.decoder_type == "qwen":
+            # PEFT wrapper -> Qwen3ForCausalLM -> Qwen3Model -> the embedding layer
+            return self.lm.base_model.model.model.embed_tokens(tokens)
+
+        else:
+            raise NotImplementedError(f"Unsupported decoder: {self.decoder_type}")

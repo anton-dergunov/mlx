@@ -65,7 +65,7 @@ def collate_fn(pad_token, batch):
     return images, captions, attention_mask
 
 
-def create_flickr_dataloaders(device, cache_dir, valid_fraction=0.2, batch_size=4, num_workers=8):
+def create_flickr_dataloaders(device, cache_dir, decoder_type, valid_fraction=0.2, batch_size=4, num_workers=8):
     flickr_dataset = load_dataset("nlphuji/flickr30k")['test']  # only the test dataset is available
 
     clip_model = CLIPModel.from_pretrained(CLIP_NAME)
