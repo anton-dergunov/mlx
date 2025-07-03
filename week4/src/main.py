@@ -20,9 +20,12 @@ def main_internal(cfg):
     train_loader, valid_loader = create_flickr_dataloaders(
         device,
         cfg.dataset.cache_dir,
+        cfg.model.decoder,
         cfg.dataset.valid_fraction,
         cfg.dataset.batch_size,
         cfg.dataset.num_workers)
+
+    # FIXME Cache by the parameter values
 
     # TODO Expose hyperparameters of the model
     model = ImageCaptioningModel(

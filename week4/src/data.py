@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import random_split
-from transformers import CLIPProcessor, CLIPModel, GPT2Tokenizer
+from transformers import CLIPProcessor, CLIPModel, GPT2Tokenizer, AutoTokenizer
 from datasets import load_dataset
 import pickle
 from tqdm import tqdm
@@ -12,6 +12,7 @@ import os
 
 CLIP_NAME = "openai/clip-vit-base-patch32"
 GPT2_NAME = "distilgpt2"  # Smaller than GPT2
+QWEN_NAME = "Qwen/Qwen3-0.6B-Base"
 
 
 class FlickrPrecomputedDataset(Dataset):
@@ -65,21 +66,28 @@ def collate_fn(pad_token, batch):
     return images, captions, attention_mask
 
 
-def create_flickr_dataloaders(device, cache_dir, valid_fraction=0.2, batch_size=4, num_workers=8):
+def create_flickr_dataloaders(device, cache_dir, decoder_type, valid_fraction=0.2, batch_size=4, num_workers=8):
     flickr_dataset = load_dataset("nlphuji/flickr30k")['test']  # only the test dataset is available
 
     clip_model = CLIPModel.from_pretrained(CLIP_NAME)
     clip_processor = CLIPProcessor.from_pretrained(CLIP_NAME, use_fast=False)  # slow processor was saved with this model
 
-    gpt2_tokenizer = GPT2Tokenizer.from_pretrained(GPT2_NAME)
-    gpt2_tokenizer.pad_token = gpt2_tokenizer.eos_token
+    if decoder_type in ["gpt2", "custom"]:
+        tokenizer = GPT2Tokenizer.from_pretrained(GPT2_NAME)
+        tokenizer.pad_token = tokenizer.eos_token
+    elif decoder_type == "qwen":
+        tokenizer = AutoTokenizer.from_pretrained(QWEN_NAME)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.bos_token = tokenizer.eos_token
+    else:
+        raise NotImplementedError(f"Unsupported decoder: {decoder_type}")
 
     dataset = FlickrPrecomputedDataset(
         cache_dir,
         flickr_dataset,
         clip_model,
         clip_processor,
-        gpt2_tokenizer,
+        tokenizer,
         device)
     
     total_size = len(dataset)
@@ -88,7 +96,7 @@ def create_flickr_dataloaders(device, cache_dir, valid_fraction=0.2, batch_size=
 
     train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
 
-    collate = partial(collate_fn, gpt2_tokenizer.pad_token_id)
+    collate = partial(collate_fn, tokenizer.pad_token_id)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, collate_fn=collate)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate)
 
