@@ -52,7 +52,6 @@ class ImageCaptioningModel(nn.Module):
             self.tokenizer = AutoTokenizer.from_pretrained(QWEN_NAME)
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.bos_token = self.tokenizer.eos_token
-            self.tokenizer.bos_token = self.tokenizer.eos_token
 
             base_model = AutoModelForCausalLM.from_pretrained(QWEN_NAME, torch_dtype=torch.float16)
             base_model.resize_token_embeddings(len(self.tokenizer))  # required after adding PAD token

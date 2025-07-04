@@ -12,3 +12,4 @@ datasets
 nltk
 wandb
 peft
+gradio
