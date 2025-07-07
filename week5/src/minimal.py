@@ -51,7 +51,7 @@ class UrbanSoundDataset(Dataset):
         sr = item['audio']['sampling_rate']
 
         if sr != SAMPLE_RATE:
-            waveform = self.torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
+            waveform = torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
 
         if waveform.ndim > 1:
             waveform = waveform.mean(dim=0)
