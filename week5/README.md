@@ -24,4 +24,8 @@ References for inspiration
 
 Using salience?
 
+- Display spectrogram with moving head to visualize
+https://stackoverflow.com/questions/59641390/jupyter-widget-to-play-audio-with-playhead-on-graph
+https://gist.github.com/deeplycloudy/2152643
+https://github.com/scottire/fastpages/blob/master/_notebooks/2020-10-21-interactive-audio-plots-in-jupyter-notebook.ipynb
 

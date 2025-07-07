@@ -10,3 +10,5 @@ datasets
 wandb
 librosa
 torchaudio
+matplotlib
+gradio
