@@ -1,0 +1,12 @@
+numpy==2.2.*
+transformers
+tqdm
+torch
+torchvision
+ipykernel
+ipywidgets
+omegaconf
+datasets
+wandb
+librosa
+torchaudio
