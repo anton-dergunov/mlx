@@ -12,3 +12,4 @@ librosa
 torchaudio
 matplotlib
 gradio
+sklearn
