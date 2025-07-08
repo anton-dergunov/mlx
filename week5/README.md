@@ -183,3 +183,175 @@ Mean Accuracy: 0.9354 ± 0.0868
 Mean Macro F1: 0.9400 ± 0.0792
 ```
 
+Results for Transformer:
+
+```
+Model architecture:
+ AudioTransformer(
+  (conv): Sequential(
+    (0): Conv2d(1, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (1): BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (2): ReLU()
+    (3): Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (4): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (5): ReLU()
+    (6): Conv2d(64, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+    (7): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (8): ReLU()
+  )
+  (proj): Linear(in_features=1024, out_features=256, bias=True)
+  (pos_encoder): PositionalEncoding()
+  (transformer_encoder): TransformerEncoder(
+    (layers): ModuleList(
+      (0-3): 4 x TransformerEncoderLayer(
+        (self_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (linear1): Linear(in_features=256, out_features=512, bias=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (linear2): Linear(in_features=512, out_features=256, bias=True)
+        (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (dropout1): Dropout(p=0.1, inplace=False)
+        (dropout2): Dropout(p=0.1, inplace=False)
+      )
+    )
+  )
+  (classifier): Linear(in_features=256, out_features=10, bias=True)
+)
+Total parameters: 2466506
+
+=== Fold 1 ===
+Epoch 1/10 | Loss: 1.6922
+Epoch 2/10 | Loss: 0.8898
+Epoch 3/10 | Loss: 0.6264
+Epoch 4/10 | Loss: 0.4279
+Epoch 5/10 | Loss: 0.2903
+Epoch 6/10 | Loss: 0.2542
+Epoch 7/10 | Loss: 0.2351
+Epoch 8/10 | Loss: 0.1882
+Epoch 9/10 | Loss: 0.1624
+Epoch 10/10 | Loss: 0.1671
+Fold 1 | Accuracy: 0.6770 | Macro F1: 0.7011
+
+=== Fold 2 ===
+Epoch 1/10 | Loss: 0.2414
+Epoch 2/10 | Loss: 0.1443
+Epoch 3/10 | Loss: 0.1484
+Epoch 4/10 | Loss: 0.1215
+Epoch 5/10 | Loss: 0.1094
+Epoch 6/10 | Loss: 0.1378
+Epoch 7/10 | Loss: 0.0846
+Epoch 8/10 | Loss: 0.0901
+Epoch 9/10 | Loss: 0.0895
+Epoch 10/10 | Loss: 0.1188
+Fold 2 | Accuracy: 0.7894 | Macro F1: 0.8054
+
+=== Fold 3 ===
+Epoch 1/10 | Loss: 0.1408
+Epoch 2/10 | Loss: 0.1145
+Epoch 3/10 | Loss: 0.0751
+Epoch 4/10 | Loss: 0.0829
+Epoch 5/10 | Loss: 0.0787
+Epoch 6/10 | Loss: 0.1021
+Epoch 7/10 | Loss: 0.0914
+Epoch 8/10 | Loss: 0.0530
+Epoch 9/10 | Loss: 0.0642
+Epoch 10/10 | Loss: 0.0773
+Fold 3 | Accuracy: 0.8605 | Macro F1: 0.8741
+
+=== Fold 4 ===
+Epoch 1/10 | Loss: 0.1130
+Epoch 2/10 | Loss: 0.0748
+Epoch 3/10 | Loss: 0.0845
+Epoch 4/10 | Loss: 0.1213
+Epoch 5/10 | Loss: 0.0851
+Epoch 6/10 | Loss: 0.1139
+Epoch 7/10 | Loss: 0.1297
+Epoch 8/10 | Loss: 0.1012
+Epoch 9/10 | Loss: 0.0994
+Epoch 10/10 | Loss: 0.0857
+Fold 4 | Accuracy: 0.9040 | Macro F1: 0.9013
+
+=== Fold 5 ===
+Epoch 1/10 | Loss: 0.1266
+Epoch 2/10 | Loss: 0.0842
+Epoch 3/10 | Loss: 0.0894
+Epoch 4/10 | Loss: 0.0866
+Epoch 5/10 | Loss: 0.0811
+Epoch 6/10 | Loss: 0.0752
+Epoch 7/10 | Loss: 0.1087
+Epoch 8/10 | Loss: 0.0863
+Epoch 9/10 | Loss: 0.1559
+Epoch 10/10 | Loss: 0.1392
+Fold 5 | Accuracy: 0.9252 | Macro F1: 0.9259
+
+=== Fold 6 ===
+Epoch 1/10 | Loss: 0.1313
+Epoch 2/10 | Loss: 0.0650
+Epoch 3/10 | Loss: 0.0644
+Epoch 4/10 | Loss: 0.1100
+Epoch 5/10 | Loss: 0.0859
+Epoch 6/10 | Loss: 0.1661
+Epoch 7/10 | Loss: 0.1330
+Epoch 8/10 | Loss: 0.1380
+Epoch 9/10 | Loss: 0.1051
+Epoch 10/10 | Loss: 0.1439
+Fold 6 | Accuracy: 0.7679 | Macro F1: 0.7755
+
+=== Fold 7 ===
+Epoch 1/10 | Loss: 0.1700
+Epoch 2/10 | Loss: 0.0792
+Epoch 3/10 | Loss: 0.0773
+Epoch 4/10 | Loss: 0.1150
+Epoch 5/10 | Loss: 0.0902
+Epoch 6/10 | Loss: 0.1032
+Epoch 7/10 | Loss: 0.0753
+Epoch 8/10 | Loss: 0.0975
+Epoch 9/10 | Loss: 0.0942
+Epoch 10/10 | Loss: 0.0765
+Fold 7 | Accuracy: 0.9236 | Macro F1: 0.9274
+
+=== Fold 8 ===
+Epoch 1/10 | Loss: 0.1040
+Epoch 2/10 | Loss: 0.1094
+Epoch 3/10 | Loss: 0.0841
+Epoch 4/10 | Loss: 0.0554
+Epoch 5/10 | Loss: 0.0714
+Epoch 6/10 | Loss: 0.0718
+Epoch 7/10 | Loss: 0.0571
+Epoch 8/10 | Loss: 0.0737
+Epoch 9/10 | Loss: 0.0578
+Epoch 10/10 | Loss: 0.0770
+Fold 8 | Accuracy: 0.9454 | Macro F1: 0.9537
+
+=== Fold 9 ===
+Epoch 1/10 | Loss: 0.1035
+Epoch 2/10 | Loss: 0.0619
+Epoch 3/10 | Loss: 0.0677
+Epoch 4/10 | Loss: 0.1277
+Epoch 5/10 | Loss: 0.1050
+Epoch 6/10 | Loss: 0.0691
+Epoch 7/10 | Loss: 0.0782
+Epoch 8/10 | Loss: 0.0746
+Epoch 9/10 | Loss: 0.0930
+Epoch 10/10 | Loss: 0.0732
+Fold 9 | Accuracy: 0.9498 | Macro F1: 0.9553
+
+=== Fold 10 ===
+Epoch 1/10 | Loss: 0.1028
+Epoch 2/10 | Loss: 0.0806
+Epoch 3/10 | Loss: 0.0694
+Epoch 4/10 | Loss: 0.0602
+Epoch 5/10 | Loss: 0.0772
+Epoch 6/10 | Loss: 0.0781
+Epoch 7/10 | Loss: 0.1357
+Epoch 8/10 | Loss: 0.1297
+Epoch 9/10 | Loss: 0.0667
+Epoch 10/10 | Loss: 0.0703
+Fold 10 | Accuracy: 0.9128 | Macro F1: 0.9196
+
+=== 10-fold CV Results ===
+Mean Accuracy: 0.8656 ± 0.0866
+Mean Macro F1: 0.8739 ± 0.0810
+```

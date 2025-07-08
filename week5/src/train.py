@@ -50,7 +50,7 @@ def train_loop(model, dataloaders_factory, device, epochs=DEFAULT_EPOCHS, lr=DEF
 
         model = model.to(device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(epochs):

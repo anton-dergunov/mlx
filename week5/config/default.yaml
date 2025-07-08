@@ -1,6 +1,6 @@
 dataset:
   name: "danavery/urbansound8K"
-  batch_size: 32
+  batch_size: 128
   sample_rate: 22050
   n_fft: 1024
   hop_length: 512
@@ -9,6 +9,7 @@ dataset:
   num_classes: 10
 
 model:
+  type: "transformer"  # "transformer" or "cnn"
   save_path_base: "/Users/anton/mlx/src/week5/models/model"
 
 train:

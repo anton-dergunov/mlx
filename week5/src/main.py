@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 import os
 
-from model import SimpleCNN
+from model import SimpleCNN, AudioTransformer
 from data import create_dataloaders_factory
 from train import train_loop
 from utils import get_device, seed_all
@@ -25,11 +25,21 @@ def main_internal(cfg):
         cfg.dataset.num_mels,
         cfg.dataset.batch_size)
 
-    model = SimpleCNN(
-        cfg.dataset.num_mels,
-        cfg.dataset.sample_rate * cfg.dataset.max_duration,
-        cfg.dataset.hop_length,
-        cfg.dataset.num_classes)
+    if cfg.model.type == "cnn":
+        model = SimpleCNN(
+            cfg.dataset.num_mels,
+            cfg.dataset.sample_rate * cfg.dataset.max_duration,
+            cfg.dataset.hop_length,
+            cfg.dataset.num_classes)
+        # TODO Expose parameters of the architecture in config
+    
+    elif cfg.model.type == "transformer":
+        model = AudioTransformer(
+            cfg.dataset.num_mels)
+        # FIXME Provide other arguments
+
+    else:
+        raise ValueError(f"Unrecognized model type: {cfg.model.type}")
 
     print("Model architecture:\n", model)
     total_params = sum(p.numel() for p in model.parameters())
