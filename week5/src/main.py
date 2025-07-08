@@ -18,10 +18,19 @@ def main_internal(cfg):
     print(f"Using device: {device}")
 
     dataloaders_factory = create_dataloaders_factory(
+        cfg.dataset.name,
+        cfg.dataset.sample_rate,
+        cfg.dataset.n_fft,
+        cfg.dataset.hop_length,
+        cfg.dataset.num_mels,
         cfg.dataset.batch_size)
 
-    # TODO Expose hyperparameters of the model
-    model = SimpleCNN()
+    model = SimpleCNN(
+        cfg.dataset.num_mels,
+        cfg.dataset.sample_rate * cfg.dataset.max_duration,
+        cfg.dataset.hop_length,
+        cfg.dataset.num_classes)
+
     print("Model architecture:\n", model)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params}")
@@ -29,7 +38,9 @@ def main_internal(cfg):
     train_loop(
         model,
         dataloaders_factory,
-        device)
+        device,
+        cfg.train.epochs,
+        cfg.train.lr)
 
     # Save the trained model locally
     # if "save_path_base" in cfg.model:

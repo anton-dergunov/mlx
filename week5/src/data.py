@@ -4,28 +4,18 @@ from torch.nn.functional import pad
 import torchaudio
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset
+from functools import partial
 
 
-BATCH_SIZE = 32
-NUM_WORKERS = 4
-
-# TODO Expose these parameters in config; make sure the work well with the cache
-SAMPLE_RATE = 22050
-N_FFT = 1024
-HOP_LENGTH = 512
-NUM_MELS = 64
-DURATION = 4  # seconds
-FIXED_LENGTH = SAMPLE_RATE * DURATION
+DEFAULT_DATASET_NAME = "danavery/urbansound8K"
+DEFAULT_BATCH_SIZE = 32
+DEFAULT_SAMPLE_RATE = 22050
+DEFAULT_N_FFT = 1024
+DEFAULT_HOP_LENGTH = 512
+DEFAULT_NUM_MELS = 64
 
 
-mel_transform = torchaudio.transforms.MelSpectrogram(
-    sample_rate=SAMPLE_RATE,
-    n_fft=N_FFT,
-    hop_length=HOP_LENGTH,
-    n_mels=NUM_MELS
-)
-
-def preprocess_batch(batch):
+def preprocess_batch(mel_transform, sample_rate, batch):
     waveform = torch.tensor(batch['audio']['array'], dtype=torch.float32)
     sr = batch['audio']['sampling_rate']
 
@@ -33,8 +23,8 @@ def preprocess_batch(batch):
     if waveform.ndim > 1:
         waveform = waveform.mean(dim=0)
 
-    if sr != SAMPLE_RATE:
-        waveform = torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
+    if sr != sample_rate:
+        waveform = torchaudio.functional.resample(waveform, sr, sample_rate)
 
     mel = mel_transform(waveform)
     mel_db = torchaudio.functional.amplitude_to_DB(mel, multiplier=10.0, amin=1e-10, db_multiplier=0.0)
@@ -84,7 +74,7 @@ def pad_collate(batch):
 
 
 class DataLoadersFactory:
-    def __init__(self, hf_dataset, batch_size=BATCH_SIZE):
+    def __init__(self, hf_dataset, batch_size=DEFAULT_BATCH_SIZE):
         self.ds = hf_dataset
         self.batch_size = batch_size
 
@@ -99,11 +89,28 @@ class DataLoadersFactory:
         return train_loader, test_loader
 
 
-def create_dataloaders_factory(batch_size=BATCH_SIZE):
-    dataset = load_dataset("danavery/urbansound8K", split="train")
+def create_dataloaders_factory(
+    dataset_name=DEFAULT_DATASET_NAME,
+    sample_rate=DEFAULT_SAMPLE_RATE,
+    n_fft=DEFAULT_N_FFT,
+    hop_length=DEFAULT_HOP_LENGTH,
+    num_mels=DEFAULT_NUM_MELS,
+    batch_size=DEFAULT_BATCH_SIZE,
+):
 
+    dataset = load_dataset(dataset_name, split="train")
+
+    mel_transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sample_rate,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        n_mels=num_mels
+    )
+    preprocess_fn = partial(preprocess_batch, mel_transform, sample_rate)
+
+    # https://huggingface.co/docs/datasets/en/cache#enable-or-disable-caching
     dataset = dataset.map(
-        preprocess_batch,
+        preprocess_fn,
         remove_columns=['audio'],
         num_proc=1,  # does not work in multiple processes due to torchaudio limitations
         desc="Precomputing spectrograms"

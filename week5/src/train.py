@@ -5,9 +5,8 @@ import numpy as np
 from tqdm import tqdm
 
 
-# TODO Expose via config
-EPOCHS = 10
-LEARNING_RATE = 1e-3
+DEFAULT_EPOCHS = 10
+DEFAULT_LR = 1e-3
 
 
 def train_one_epoch(model, loader, optimizer, criterion, device):
@@ -40,7 +39,7 @@ def evaluate(model, loader, device):
     return acc, f1, cm
 
 
-def train_loop(model, dataloaders_factory, device):
+def train_loop(model, dataloaders_factory, device, epochs=DEFAULT_EPOCHS, lr=DEFAULT_LR):
     fold_accuracies = []
     fold_f1s = []
     
@@ -51,12 +50,12 @@ def train_loop(model, dataloaders_factory, device):
 
         model = model.to(device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         criterion = nn.CrossEntropyLoss()
 
-        for epoch in range(EPOCHS):
+        for epoch in range(epochs):
             loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss:.4f}")
+            print(f"Epoch {epoch+1}/{epochs} | Loss: {loss:.4f}")
 
         acc, f1, cm = evaluate(model, test_loader, device)
         # TODO Report cm
