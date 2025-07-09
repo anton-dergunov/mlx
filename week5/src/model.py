@@ -65,9 +65,9 @@ class PositionalEncoding(nn.Module):
 class AudioTransformer(nn.Module):
     def __init__(self,
                  n_mels=64,  # FIXME Provide and use this argument
-                 d_model=256,
+                 d_model=128,
                  nhead=4,
-                 num_layers=4,
+                 num_layers=2,
                  num_classes=10):
         super().__init__()
 

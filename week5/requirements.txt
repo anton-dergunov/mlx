@@ -12,4 +12,5 @@ librosa
 torchaudio
 matplotlib
 gradio
-sklearn
+scikit-learn
+openai-whisper
