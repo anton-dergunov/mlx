@@ -1,10 +1,12 @@
-# pip install gradio whisper praat-parselmouth numpy matplotlib pypinyin torch transformers librosa
+# pip install gradio whisper praat-parselmouth numpy matplotlib pypinyin torch transformers librosa soundfile
+# pip install aeneas
 #
 # for MFA:
 # pip install spacy-pkuseg dragonmapper hanziconv
 # mfa model download acoustic mandarin_mfa
 # mfa model download dictionary mandarin_mfa
 # not needed: mfa model download language_model mandarin_mfa_lm
+# brew install --cask font-noto-sans-cjk
 
 
 import gradio as gr
@@ -15,11 +17,19 @@ import os
 import subprocess
 import parselmouth
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib import pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.gridspec as gridspec
 from pypinyin import pinyin, Style
 from praatio import textgrid
 import librosa
+import soundfile as sf
 import shutil
+
+
+# https://stackoverflow.com/questions/39630928/how-to-plot-a-figure-with-chinese-characters-in-label
+matplotlib.rcParams['font.family'] = ['Heiti TC']
 
 
 # 1️⃣ Load Whisper
@@ -29,7 +39,7 @@ processor = WhisperProcessor.from_pretrained("openai/whisper-small")
 model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small").to(DEVICE)
 
 # Correctly set task + language on config:
-model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="chinese", task="transcribe")
+# model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="chinese", task="transcribe")
 
 def recognize(audio_path):
     waveform, sr = librosa.load(audio_path, sr=16000)
@@ -39,14 +49,25 @@ def recognize(audio_path):
         return_tensors="pt"
     )
     inputs = inputs.to(DEVICE)
+    decoder_prompt = processor.get_decoder_prompt_ids(language="chinese", task="transcribe")
+    model.config.forced_decoder_ids = decoder_prompt
+
     predicted_ids = model.generate(
         input_features=inputs.input_features
     )
     return processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
 
+def trim_silence(audio_path):
+    y, sr = librosa.load(audio_path, sr=16000)
+    yt, index = librosa.effects.trim(y, top_db=20)  # adjust top_db to taste
+    trimmed_path = audio_path.replace(".wav", "_trimmed.wav")
+    print(trimmed_path)
+    sf.write(trimmed_path, yt, sr)
+    return trimmed_path
+
 # 2️⃣ Target phrase
 TARGET_TEXT = "我喜欢机器学习"
-TARGET_PINYIN = ' '.join(sum(pinyin(TARGET_TEXT, style=Style.TONE3), []))
+TARGET_PINYIN = ' '.join(sum(pinyin(TARGET_TEXT, style=Style.TONE), []))
 
 # 3️⃣ MFA setup
 MFA_MODEL = "mandarin_mfa"  # download from MFA site
@@ -62,31 +83,50 @@ def parse_textgrid(tg_path):
     intervals = words_tier.entries
     return intervals  # List of (start, end, label)
 
+TONE_COLORS = {
+    '1': '#cce5ff',  # pale blue
+    '2': '#ccffcc',  # pale green
+    '3': '#fff2cc',  # pale yellow
+    '4': '#ffcccc',  # pale red
+    '5': '#e0e0e0',  # neutral tone (light grey)
+}
+
+def get_tone_color(label):
+    import re
+    # Extract trailing tone digit
+    m = re.search(r'(\d)', label)
+    if m:
+        return TONE_COLORS.get(m.group(1), '#eeeeee')
+    return '#eeeeee'
+
 def plot_alignment_and_pitch(segments, pitch_times, pitch_values, duration):
-    fig, ax = plt.subplots(figsize=(12, 3))
+    fig = plt.figure(figsize=(12, 6))
+    gs = gridspec.GridSpec(2, 1, height_ratios=[1, 3])  # word=1, pitch=3
 
     # Words tier
+    ax_words = fig.add_subplot(gs[0])
     for start, end, label in segments:
-        color = "blue" if label.strip() else "white"
-        ax.axvspan(start, end, ymin=0.6, ymax=1.0, color=color, alpha=0.3 if label else 0)
+        color = get_tone_color(label) if label.strip() else "white"
+        ax_words.axvspan(start, end, ymin=0.6, ymax=1.0, color=color, alpha=0.3 if label else 0)
         if label.strip():
-            ax.text((start + end)/2, 0.8, label, ha="center", va="center")
+            ax_words.text((start + end)/2, 0.8, label, ha="center", va="center")
 
     # Pitch line
-    ax.plot(pitch_times, pitch_values / np.nanmax(pitch_values), color="red", lw=2)
+    ax_pitch = fig.add_subplot(gs[1], sharex=ax_words)
+    ax_pitch.plot(pitch_times, pitch_values / np.nanmax(pitch_values), color="red", lw=2)
 
-    ax.set_xlim([0, duration])
-    ax.set_ylim([0, 1])
-    ax.set_xlabel("Time (s)")
-    ax.set_yticks([])
+    ax_pitch.set_xlim([0, duration])
+    ax_pitch.set_ylim([0, 1])
+    ax_pitch.set_xlabel("Time (s)")
+    ax_pitch.set_yticks([])
 
     return fig
 
 # 4️⃣ Recognize & analyze
 def analyze(audio):
-    audio_path = audio
+    audio_path = trim_silence(audio)
     hanzi = recognize(audio_path)
-    pinyin_out = ' '.join(sum(pinyin(hanzi, style=Style.TONE3), []))
+    pinyin_out = ' '.join(sum(pinyin(hanzi, style=Style.TONE), []))
 
     # MFA: same as before
     corpus_dir = tempfile.mkdtemp()
@@ -98,6 +138,7 @@ def analyze(audio):
     mfa_output_dir = tempfile.mkdtemp()
     subprocess.run([
         "mfa", "align",
+        "--single_speaker",
         corpus_dir,
         MFA_DICT,
         MFA_MODEL,
@@ -119,9 +160,10 @@ def analyze(audio):
     # ✅ Plot combined
     fig = plot_alignment_and_pitch(segments, pitch_times, pitch_values, duration)
     plot_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-    fig.savefig(plot_path.name)
+    fig.tight_layout()
+    fig.savefig(plot_path.name, bbox_inches="tight")
 
-    return f"### Whisper Hanzi\n{hanzi}\n\n### Pinyin\n{pinyin_out}\n\n### Target Pinyin\n{TARGET_PINYIN}", plot_path.name
+    return f"### Whisper Hanzi\n{hanzi}\n\n### Pinyin\n{pinyin_out}\n\n### Target Pinyin\n{TARGET_PINYIN}", plot_path.name, audio_path
 
 # Gradio UI
 with gr.Blocks() as demo:

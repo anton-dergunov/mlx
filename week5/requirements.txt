@@ -14,3 +14,7 @@ matplotlib
 gradio
 scikit-learn
 openai-whisper
+montreal-forced-aligner
+pypinyin
+praat-parselmouth
+whisperx
