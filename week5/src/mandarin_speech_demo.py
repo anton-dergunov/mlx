@@ -143,7 +143,7 @@ def ctc_align(audio_path, text):
                 segments.append({'char': char, 'start_frame': time_idx, 'end_frame': time_idx})
             else:
                 segments[-1]['end_frame'] = time_idx
-                
+                    
     # segments = []
     # for i, p_idx in enumerate(path):
     #     if p_idx % 2 != 0: # Character token, not blank
