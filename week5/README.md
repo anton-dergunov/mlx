@@ -1,6 +1,8 @@
 
 ## Audio Classification
 
+https://github.com/openai/whisper
+
 https://huggingface.co/datasets/danavery/urbansound8K
 
 What is VGG-like, CRNN?
@@ -355,3 +357,77 @@ Fold 10 | Accuracy: 0.9128 | Macro F1: 0.9196
 Mean Accuracy: 0.8656 ± 0.0866
 Mean Macro F1: 0.8739 ± 0.0810
 ```
+
+
+## Emotion Classifier
+
+https://www.kaggle.com/datasets/uwrfkaggler/ravdess-emotional-speech-audio
+
+
+
+## Mandarin Chinese Pronunciation Trainer
+
+Main inspiration:
+https://github.com/lars76/forced-alignment-chinese?tab=readme-ov-file
+
+https://montreal-forced-aligner.readthedocs.io/en/latest/installation.html
+https://en.data-baker.com/datasets/freeDatasets/
+https://sos1sos2sixteen.github.io/aishell3/
+https://sos1sos2sixteen.github.io/aishell3/index.html
+https://arxiv.org/abs/2010.11567
+https://github.com/coqui-ai/TTS
+https://github.com/readbeyond/aeneas
+https://docs.pytorch.org/audio/main/tutorials/forced_alignment_tutorial.html
+https://github.com/m-bain/whisperX
+https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn
+https://github.com/nazdridoy/kokoro-tts
+https://github.com/suno-ai/bark
+https://www.reddit.com/r/LocalLLaMA/comments/1dtzfte/best_tts_model_right_now_that_i_can_self_host/
+https://mim-armand.medium.com/montreal-forced-alignment-hebrew-de7bd4180d6a
+
+Other references:
+https://wanghelin1997.github.io/CapSpeech-demo/
+
+
+## Speaker recognition (diarization)
+
+https://www.robots.ox.ac.uk/~vgg/data/voxconverse/index.html
+https://huggingface.co/datasets/diarizers-community/voxconverse
+https://umotion.univ-lemans.fr/video/9513-speech-segmentation-and-speaker-diarization/
+https://gist.github.com/hbredin/049f2b629700bcea71324d2c1e7f8337
+https://github.com/yinruiqing/pyannote-whisper
+https://gist.github.com/alunkingusw/2eb29682a98f94a714d10080ed0f4896
+https://github.com/openai/whisper/discussions/2609
+
+
+## Notes
+
+Use the dataset for corals from Ben
+Crema-D dataset for emotions. Visualize MEL spectrograms for different emotions
+Add emotion token to the output of Whisper such as <|emotion-happy|>
+Mamba
+  Efficiently modeling long sequences with structured state spaces
+  Selective state space model
+CNN for music genre recognition
+  CDDataset
+Weak supervisio in "Robust Speech recognition" paper
+Voice2midi encoder decoder
+DEMUCs for vocal extraction (from Facebook)
+Style transfer (with Whisper?)
+Input SATB, output different vocals
+  ConvTasNet for sound seperation
+Am I using hidden state from encoder part of Whisper or from decoder in Mandarin trainer app?
+Attention pooling instead of avg pooling
+HF (huggingface) trainer
+HF datacollator
+HF steps
+TODO Read huggingface tutorials, their way of doing things.
+QWen2-Audio
+QWen2-Audio-Instruct
+exploding gradients with CNN:
+- clamping tensors
+- clipping gradients
+- batch norm
+- reducing learning rate
+- using gelu/selu instead of relu
+- logging the mel-spectrogram (this worked)
