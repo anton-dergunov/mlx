@@ -1,0 +1,42 @@
+project: "ms-marco-ranking"
+
+dataset:
+  # MS Marco: https://huggingface.co/datasets/microsoft/ms_marco
+  name: "microsoft/ms_marco"
+  version: "v1.1"
+  batch_size: 64
+  cache_dir: "/root/mlx/week2/data/ms_marco"
+
+embeddings:
+  path: "/root/mlx/week2/data/GoogleNews-vectors-negative300.bin"
+  is_binary: true
+
+model:
+  type: "cross_encoder"         # "dual_encoder" or "cross_encoder"
+
+  shared_embedding: true       # true = share embedding for query/doc
+  freeze_embedding: true
+
+  cross_encoder:               # Used if type == "cross_encoder"
+    encoder_type: "rnn"
+    hidden_dims: [200, 100]
+    rnn_type: "gru"
+    hidden_dim: 128
+    num_layers: 1
+    bidirectional: false
+    use_mean_pooling: false
+
+  save_path: "/root/mlx/week2/data/uni_gru_cross_encoder.pt"
+
+train:
+  epochs: 1
+  lr: 0.001
+  seed: 42
+
+eval:
+  k: 100
+
+log:
+  wandb: true
+  project: "ms-marco-ranking"
+  run_name: "googlenews_uni_gru_cross"

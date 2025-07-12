@@ -1,0 +1,49 @@
+project: "ms-marco-ranking"
+
+dataset:
+  # MS Marco: https://huggingface.co/datasets/microsoft/ms_marco
+  name: "microsoft/ms_marco"
+  version: "v1.1"
+  batch_size: 64
+  cache_dir: "/root/mlx/week2/data/ms_marco"
+
+embeddings:
+  # GoogleNews word2vec: https://code.google.com/archive/p/word2vec/
+  path: "/root/mlx/week2/data/GoogleNews-vectors-negative300.bin"  
+  # TODO: Where to get Glove embeddings?
+  # path: "/Users/anton/experiment_data/models/glove.6B/glove.6B.50d.w2v.txt"
+  is_binary: true
+
+# query_model:
+#   type: "avg_w2v_encoder"
+#   hidden_dims: [200, 100]
+#   # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_query.pt"
+#   output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+
+# document_model:
+#   type: "avg_w2v_encoder"
+#   hidden_dims: [200, 100]
+#   # output: "/Users/anton/mlx/src/week2/models/googlenews_avg_proj_doc.pt"
+#   output: "/Users/anton/mlx/src/week2/models/glove_avg_proj_query.pt"
+
+query_model:
+  type: "bi_gru_encoder"
+  hidden_dim: 128
+  num_layers: 1
+  output: "/root/mlx/week2/data/bi_gru_encoder_query.pt"
+
+document_model:
+  type: "bi_gru_encoder"
+  hidden_dim: 128
+  num_layers: 1
+  output: "/root/mlx/week2/data/bi_gru_encoder_document.pt"
+
+train:
+  epochs: 3
+  lr: 0.001
+  seed: 42
+
+log:
+  wandb: true
+  project: "ms-marco-ranking"
+  run_name: "googlenews_bi_gru"

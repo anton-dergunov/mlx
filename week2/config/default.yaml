@@ -23,8 +23,8 @@ model:
 
   dual_encoder:                # Used if type == "dual_encoder"
     query:
-      encoder_type: "avg"
-      hidden_dims: [200, 100]
+      encoder_type: "avg_no_proj"
+      # hidden_dims: [200, 100]
 
       # encoder_type: "rnn"      # "avg_no_proj", "avg" or "rnn"
       # hidden_dims: [200, 100]  # used only if encoder_type == "avg"
@@ -35,8 +35,10 @@ model:
       # use_mean_pooling: true
 
     document:
-      encoder_type: "avg"
-      hidden_dims: [200, 100]
+      encoder_type: "avg_no_proj"
+
+      # encoder_type: "avg"
+      # hidden_dims: [200, 100]
 
   cross_encoder:               # Used if type == "cross_encoder"
     encoder_type: "rnn"
@@ -47,7 +49,7 @@ model:
     bidirectional: true
     use_mean_pooling: true
 
-  save_path: "/Users/anton/mlx/src/week2/models/avg.pt"  # single file for saving
+  save_path: "/Users/anton/mlx/src/week2/models/avg_no_proj.pt"  # single file for saving
 
 train:
   epochs: 1
@@ -56,9 +58,8 @@ train:
 
 eval:
   k: 100
-  query_sample_size: 1000
 
 log:
-  wandb: true
+  wandb: false
   project: "ms-marco-ranking"
   run_name: "googlenews_avg_proj"

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>⚡⚠️ Mega Hyper Digit Prediction Machine 9000™ ⚠️⚡</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <style>
+    body {
+      background: repeating-linear-gradient(45deg, #111, #111 10px, #222 10px, #222 20px);
+      font-family: 'Courier New', monospace;
+      color: #39ff14;
+      text-align: center;
+      padding: 1em;
+      animation: bgFlash 5s infinite alternate;
+      overflow: auto;
+    }
+
+    @keyframes bgFlash {
+      0% { background-color: black; }
+      100% { background-color: darkred; }
+    }
+
+    .canvas-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      flex-wrap: wrap;
+      gap: 1em;
+    }
+
+    .side-gif {
+      max-width: 20%;
+      height: auto;
+    }
+
+    canvas {
+      background: black;
+      image-rendering: pixelated;
+      border: 5px dotted lime;
+      cursor: crosshair;
+      width: 80vw;
+      max-width: 400px;
+      height: auto;
+    }
+
+    #controls button {
+      margin: 0.5em;
+      padding: 1em;
+      font-size: 1.2rem;
+      font-weight: bold;
+      background: #ff00ff;
+      color: yellow;
+      border: 4px ridge cyan;
+      box-shadow: 0 0 10px red;
+      text-transform: uppercase;
+      font-family: "Comic Sans MS", cursive, sans-serif;
+    }
+
+    #controls button:hover {
+      background: cyan;
+      color: black;
+    }
+
+    marquee {
+      margin-top: 1em;
+      font-size: 2rem;
+      color: #00ffff;
+      font-weight: bolder;
+      border: 6px double yellow;
+      padding: 1em;
+      text-shadow: 0 0 5px red;
+      animation: textFlash 1s infinite alternate;
+    }
+
+    @keyframes textFlash {
+      from { color: lime; }
+      to { color: magenta; }
+    }
+
+    #result {
+      animation: pulse-size 2s infinite;
+    }
+
+    @keyframes pulse-size {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+  </style>
+</head>
+<body>
+  <h1>🧠⚡ Mega Hyper Digit Predictor 9000 ⚡🧠</h1>
+
+  <div class="canvas-wrapper">
+    <img id="left-gif" class="side-gif" src="fun/01.gif" alt="left fun gif">
+    <canvas id="canvas" width="300" height="300"></canvas>
+    <img id="right-gif" class="side-gif" src="fun/02.gif" alt="right fun gif">
+  </div>
+
+  <div id="controls">
+    <button onclick="clearCanvas()">💣 PURGE 💣</button>
+    <button onclick="predict()">🔮 PREDICT 🔮</button>
+  </div>
+
+  <div id="output">
+    <marquee behavior="alternate" id="result"><span id="prediction-text">Prediction: ...</span></marquee>
+  </div>
+
+  <script>
+    const CANVAS_SIZE = 300;
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'white';
+
+    let drawing = false;
+
+    function getPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      let x, y;
+      if (evt.touches) {
+        x = evt.touches[0].clientX - rect.left;
+        y = evt.touches[0].clientY - rect.top;
+      } else {
+        x = evt.clientX - rect.left;
+        y = evt.clientY - rect.top;
+      }
+      return [
+        x * (canvas.width / canvas.clientWidth),
+        y * (canvas.height / canvas.clientHeight)
+      ];
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(...getPos(e));
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (drawing) {
+        ctx.lineTo(...getPos(e));
+        ctx.stroke();
+      }
+    });
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mouseleave', () => drawing = false);
+
+    canvas.addEventListener('touchstart', (e) => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(...getPos(e));
+      e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (drawing) {
+        ctx.lineTo(...getPos(e));
+        ctx.stroke();
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', () => drawing = false);
+
+    function clearCanvas() {
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    }
+    clearCanvas();
+
+    async function predict() {
+      alert('TODO: Add your fun prediction code here!');
+    }
+
+    function cycleSideGifs() {
+      const files = Array.from({length: 10}, (_, i) => `fun/${String(i+1).padStart(2,'0')}.gif`);
+      setInterval(() => {
+        document.getElementById('left-gif').src = files[Math.floor(Math.random() * files.length)];
+        document.getElementById('right-gif').src = files[Math.floor(Math.random() * files.length)];
+      }, 5000);
+    }
+    cycleSideGifs();
+  </script>
+</body>
+</html>

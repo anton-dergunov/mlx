@@ -12,3 +12,4 @@ week1/glove.6B.300d.txt
 week1/glove.6B.zip
 *.pyc
 week2/models/
+certificate.pem
