@@ -64,6 +64,7 @@ valid_data = dataset["valid"]
 def preprocess(examples):
     inputs = []
     targets = []
+    prompt_lens = []
 
     for prompt, label in zip(examples["prompt"], examples["label"]):
         if not prompt.strip().endswith("\nTL;DR:"):
@@ -73,7 +74,8 @@ def preprocess(examples):
             print("WARNING: label has TL;DR:, skipping.")
             continue
 
-        prompt.append("Summarize:\n" + prompt.strip() + " ")
+        full_prompt = "Summarize:\n" + prompt.strip() + "\nTL;DR:"
+        inputs.append(full_prompt)
         targets.append(label.strip())
 
     input_encodings = tokenizer(
@@ -81,7 +83,6 @@ def preprocess(examples):
         max_length=MAX_INPUT_LEN,
         truncation=True
     )
-
     target_encodings = tokenizer(
         targets,
         max_length=MAX_TARGET_LEN,
@@ -91,14 +92,20 @@ def preprocess(examples):
 
     input_ids = []
     labels = []
+    prompt_lens = []
 
     for inp_ids, tgt_ids in zip(input_encodings["input_ids"], target_encodings["input_ids"]):
         ids = inp_ids + tgt_ids + [tokenizer.eos_token_id]
         label = [-100] * len(inp_ids) + tgt_ids + [tokenizer.eos_token_id]
         input_ids.append(ids)
         labels.append(label)
+        prompt_lens.append(len(inp_ids))
 
-    return {"input_ids": input_ids, "labels": labels}
+    return {
+        "input_ids": input_ids,
+        "labels": labels,
+        "prompt_len": prompt_lens
+    }
 
 def preprocess(examples):
     inputs = ["summarize: " + doc for doc in examples["prompt"]]
@@ -135,6 +142,7 @@ valid_tokenized = valid_data.map(preprocess, batched=True, remove_columns=valid_
 def collate_fn(batch):
     input_ids = [torch.tensor(x["input_ids"], dtype=torch.long) for x in batch]
     labels = [torch.tensor(x["labels"], dtype=torch.long) for x in batch]
+    prompt_lens = [x["prompt_len"] for x in batch]
 
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
     labels_padded = pad_sequence(labels, batch_first=True, padding_value=-100)
@@ -145,6 +153,7 @@ def collate_fn(batch):
         "input_ids": input_ids_padded,
         "attention_mask": attention_mask,
         "labels": labels_padded,
+        "prompt_len": torch.tensor(prompt_lens, dtype=torch.long)
     }
 
 train_loader = DataLoader(train_tokenized, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
@@ -191,20 +200,27 @@ for epoch in range(NUM_EPOCHS):
             running_loss = 0.0
 
             model.eval()
-            # Take one random sample
+
             val_sample = next(iter(valid_loader))
+
             val_input_ids = val_sample["input_ids"].to(DEVICE)
             val_attention_mask = val_sample["attention_mask"].to(DEVICE)
+            val_prompt_len = val_sample["prompt_len"].to(DEVICE)
             val_labels = val_sample["labels"].to(DEVICE)
 
-            # Generate
+            # Only take the prompt portion
+            prompt_input_ids = val_input_ids[:, :val_prompt_len]
+            prompt_attention_mask = val_attention_mask[:, :val_prompt_len]
+
             generated_ids = model.generate(
-                input_ids=val_input_ids,
-                attention_mask=val_attention_mask,
-                max_length=MAX_TARGET_LEN,
+                input_ids=prompt_input_ids,
+                attention_mask=prompt_attention_mask,
+                max_new_tokens=MAX_TARGET_LEN,
+                pad_token_id=tokenizer.pad_token_id,
                 num_beams=4
             )
-            prompt_text = tokenizer.decode(val_input_ids[0], skip_special_tokens=True)
+
+            prompt_text = tokenizer.decode(prompt_input_ids[0], skip_special_tokens=True)
             generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
             orig_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
