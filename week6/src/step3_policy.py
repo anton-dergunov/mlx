@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.amp import autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel, prepare_model_for_kbit_training
+from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
 from tqdm import tqdm
 
@@ -35,18 +35,35 @@ model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloa
 # Prepare the base model for k-bit training before adding adapters
 model = prepare_model_for_kbit_training(model)
 
-# 2. Add all necessary adapters to this single model object
+# 2. Add all necessary adapters by first loading their configs
 # The SFT adapter serves as our non-trainable reference
-model.add_adapter(SFT_ADAPTER_PATH, adapter_name="sft")
+sft_config = LoraConfig.from_pretrained(SFT_ADAPTER_PATH)
+model.add_adapter(sft_config, adapter_name="sft")
+print("Loaded SFT adapter.")
+
 # The reward adapter is for scoring
-model.add_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
+reward_config = LoraConfig.from_pretrained(REWARD_ADAPTER_PATH)
+model.add_adapter(reward_config, adapter_name="reward")
+print("Loaded Reward adapter.")
+
 # The policy adapter starts as a copy of SFT and is the one we will train
-model.add_adapter(SFT_ADAPTER_PATH, adapter_name="policy")
+# We use the SFT config but will train a new set of weights under the 'policy' name
+model.add_adapter(sft_config, adapter_name="policy")
+print("Added Policy adapter.")
+
+
+# 3. Load the weights into the adapters
+# For sft and reward, we load their pre-trained weights.
+# For 'policy', we initialize it with the SFT weights, which serves as our starting point.
+model.load_adapter(SFT_ADAPTER_PATH, adapter_name="sft")
+model.load_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
+model.load_adapter(SFT_ADAPTER_PATH, adapter_name="policy") # Initialize policy with SFT weights
+print("Loaded adapter weights.")
 
 # Our main "policy_model" is now this single, multi-adapter model
 policy_model = model.to(DEVICE)
 
-# 3. Define and instantiate the RewardModel wrapper
+# 4. Define and instantiate the RewardModel wrapper
 # It will use the SAME underlying model but with a specific head
 class RewardModel(nn.Module):
     def __init__(self, base_lm):
