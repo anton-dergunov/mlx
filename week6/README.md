@@ -8,4 +8,5 @@ https://wandb.ai/carperai/summarize_RLHF/reports/Implementing-RLHF-Learning-to-S
 https://huggingface.co/datasets/CarperAI/openai_summarize_tldr
 https://huggingface.co/datasets/CarperAI/openai_summarize_comparisons
 
+https://github.com/freemvmt/torchpod
 

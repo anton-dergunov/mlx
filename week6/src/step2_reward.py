@@ -1,5 +1,3 @@
-# step2_reward_model.py
-
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -43,6 +41,35 @@ reward_model = RewardModel(model).to(DEVICE)
 
 # Load preference dataset
 ds = load_dataset("CarperAI/openai_summarize_comparisons", split="train")
+
+def preprocess(ex):
+    prompt = ex["prompt"]
+    chosen = ex["chosen"]
+    rejected = ex["rejected"]
+
+    if prompt.strip().endswith("TL;DR:"):
+        print("WARNING: Reward prompt ends with TL;DR:, skipping.")
+        return None
+    if not chosen.strip().startswith("TL;DR: "):
+        print("WARNING: Chosen missing TL;DR:, skipping.")
+        return None
+    if not rejected.strip().startswith("TL;DR: "):
+        print("WARNING: Rejected missing TL;DR:, skipping.")
+        return None
+
+    chosen_enc = tokenizer("Summarize:\n" + prompt + "\n" + chosen, truncation=True, max_length=MAX_LEN)
+    rejected_enc = tokenizer("Summarize:\n" + prompt + "\n" + rejected, truncation=True, max_length=MAX_LEN)
+
+    return {
+        "chosen_input_ids": chosen_enc["input_ids"],
+        "chosen_attention_mask": chosen_enc["attention_mask"],
+        "rejected_input_ids": rejected_enc["input_ids"],
+        "rejected_attention_mask": rejected_enc["attention_mask"],
+    }
+
+ds = ds.map(preprocess).filter(lambda x: x is not None)
+
+
 
 def preprocess(ex):
     prompt = ex["prompt"]

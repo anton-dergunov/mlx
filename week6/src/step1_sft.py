@@ -62,6 +62,45 @@ valid_data = dataset["valid"]
 # --------------------------
 
 def preprocess(examples):
+    inputs = []
+    targets = []
+
+    for prompt, label in zip(examples["prompt"], examples["label"]):
+        if not prompt.strip().endswith("\nTL;DR:"):
+            print("WARNING: prompt does not end with TL;DR:, skipping.")
+            continue
+        if label.strip().lower().startswith("tl;dr:"):
+            print("WARNING: label has TL;DR:, skipping.")
+            continue
+
+        prompt.append("Summarize:\n" + prompt.strip() + " ")
+        targets.append(label.strip())
+
+    input_encodings = tokenizer(
+        inputs,
+        max_length=MAX_INPUT_LEN,
+        truncation=True
+    )
+
+    target_encodings = tokenizer(
+        targets,
+        max_length=MAX_TARGET_LEN,
+        truncation=True,
+        add_special_tokens=False
+    )
+
+    input_ids = []
+    labels = []
+
+    for inp_ids, tgt_ids in zip(input_encodings["input_ids"], target_encodings["input_ids"]):
+        ids = inp_ids + tgt_ids + [tokenizer.eos_token_id]
+        label = [-100] * len(inp_ids) + tgt_ids + [tokenizer.eos_token_id]
+        input_ids.append(ids)
+        labels.append(label)
+
+    return {"input_ids": input_ids, "labels": labels}
+
+def preprocess(examples):
     inputs = ["summarize: " + doc for doc in examples["prompt"]]
     targets = [label for label in examples["label"]]
 
@@ -168,8 +207,8 @@ for epoch in range(NUM_EPOCHS):
             generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
             print("\n=== EVAL SAMPLE ===")
-            print(f"Prompt: {prompt_text[:100]}...")
-            print(f"Generated: {generated_text[-100:]}\n")
+            print(f"Prompt: {prompt_text[:200]}...")
+            print(f"Generated: {generated_text[-200:]}\n")
             model.train()
 
 # --------------------------
