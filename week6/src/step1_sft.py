@@ -16,7 +16,7 @@ DATASET_NAME = "CarperAI/openai_summarize_tldr"
 OUTPUT_DIR = "models/qwen3_sft_lora"
 BATCH_SIZE = 2
 LR = 2e-5
-NUM_EPOCHS = 1  # For testing
+NUM_EPOCHS = 0  # For testing
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 MAX_INPUT_LEN = 512
 MAX_TARGET_LEN = 64
@@ -163,7 +163,7 @@ for epoch in range(NUM_EPOCHS):
 
             print("\n=== EVAL SAMPLE ===")
             print(f"Prompt: {prompt_text[:100]}...")
-            print(f"Generated: {generated_text}\n")
+            print(f"Generated: {generated_text[-100:]}\n")
             model.train()
 
 # --------------------------
