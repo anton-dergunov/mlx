@@ -141,69 +141,70 @@ running_loss = 0.0
 for epoch in range(EPOCHS):
     loop = tqdm(loader)
     for batch in loop:
-        input_ids = batch["input_ids"].to(DEVICE)
-        attention_mask = batch["attention_mask"].to(DEVICE)
-
-        # === 1) Rollout ===
-        # Set the active adapter to 'policy' for generation
-        policy_model.set_adapter("policy")
-        policy_model.train() # Use train mode for generation to ensure dropout is active if it was during SFT
-
-        with torch.no_grad():
-            output = policy_model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=MAX_LEN,
-                do_sample=True,
-                top_k=50,
-                top_p=0.95,
-                temperature=1.0,
-                pad_token_id=tokenizer.eos_token_id
-            )
-
-        # Detach completions
-        completions = []
-        for j in range(BATCH_SIZE):
-            gen = output[j][input_ids.shape[1]:]
-            completions.append(gen.unsqueeze(0))
-        completions = torch.cat(completions, dim=0)
-
-        generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(BATCH_SIZE)]
-
-        # Combine prompt + generated
-        full_ids = torch.cat([input_ids, completions], dim=1)
-        full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
-
-        # === 2) Reward ===
-        # Set the active adapter to 'reward' for scoring
-        policy_model.set_adapter("reward")
-        with torch.no_grad():
-            # The reward_model uses the policy_model internally, which now has the 'reward' adapter active
-            reward = reward_model(full_ids, full_attention_mask).detach()
-
-        # === 3) Compute old log probs ===
-        # Set the active adapter to 'sft' (our fixed reference)
-        policy_model.set_adapter("sft")
-        with torch.no_grad():
-            old_outputs = policy_model(
-                input_ids=full_ids,
-                attention_mask=full_attention_mask
-            )
-            old_logits = old_outputs.logits[:, :-1, :]
-            old_labels = full_ids[:, 1:]
-
-            old_logprobs_per_token = -nn.functional.cross_entropy(
-                old_logits.reshape(-1, old_logits.size(-1)),
-                old_labels.reshape(-1),
-                reduction='none'
-            )
-            old_logprobs = old_logprobs_per_token.view(old_labels.shape).sum(dim=1)
-
-        advantage = reward  # simple version, no baseline
-
-        # === 4) PPO update ===
-        # Set the adapter back to 'policy' for the training step
         try:
+
+            input_ids = batch["input_ids"].to(DEVICE)
+            attention_mask = batch["attention_mask"].to(DEVICE)
+
+            # === 1) Rollout ===
+            # Set the active adapter to 'policy' for generation
+            policy_model.set_adapter("policy")
+            policy_model.train() # Use train mode for generation to ensure dropout is active if it was during SFT
+
+            with torch.no_grad():
+                output = policy_model.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=MAX_LEN,
+                    do_sample=True,
+                    top_k=50,
+                    top_p=0.95,
+                    temperature=1.0,
+                    pad_token_id=tokenizer.eos_token_id
+                )
+
+            # Detach completions
+            completions = []
+            for j in range(BATCH_SIZE):
+                gen = output[j][input_ids.shape[1]:]
+                completions.append(gen.unsqueeze(0))
+            completions = torch.cat(completions, dim=0)
+
+            generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(BATCH_SIZE)]
+
+            # Combine prompt + generated
+            full_ids = torch.cat([input_ids, completions], dim=1)
+            full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
+
+            # === 2) Reward ===
+            # Set the active adapter to 'reward' for scoring
+            policy_model.set_adapter("reward")
+            with torch.no_grad():
+                # The reward_model uses the policy_model internally, which now has the 'reward' adapter active
+                reward = reward_model(full_ids, full_attention_mask).detach()
+
+            # === 3) Compute old log probs ===
+            # Set the active adapter to 'sft' (our fixed reference)
+            policy_model.set_adapter("sft")
+            with torch.no_grad():
+                old_outputs = policy_model(
+                    input_ids=full_ids,
+                    attention_mask=full_attention_mask
+                )
+                old_logits = old_outputs.logits[:, :-1, :]
+                old_labels = full_ids[:, 1:]
+
+                old_logprobs_per_token = -nn.functional.cross_entropy(
+                    old_logits.reshape(-1, old_logits.size(-1)),
+                    old_labels.reshape(-1),
+                    reduction='none'
+                )
+                old_logprobs = old_logprobs_per_token.view(old_labels.shape).sum(dim=1)
+
+            advantage = reward  # simple version, no baseline
+
+            # === 4) PPO update ===
+            # Set the adapter back to 'policy' for the training step
             policy_model.set_adapter("policy")
             for ppo_epoch in range(PPO_EPOCHS):
                 with autocast(DEVICE, dtype=torch.bfloat16):
