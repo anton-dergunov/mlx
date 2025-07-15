@@ -129,7 +129,13 @@ for epoch in range(EPOCHS):
             clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
             surrogate1 = ratio * advantage
             surrogate2 = clipped_ratio * advantage
+
             ppo_loss = -torch.min(surrogate1, surrogate2).mean()
+
+            print("=== DEBUG ===")
+            print(f"logprobs.requires_grad: {logprobs.requires_grad}")
+            print(f"ratio.requires_grad: {ratio.requires_grad}")
+            print(f"ppo_loss.requires_grad: {ppo_loss.requires_grad}")
 
             optimizer.zero_grad()
             ppo_loss.backward()
