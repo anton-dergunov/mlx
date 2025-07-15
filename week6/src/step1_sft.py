@@ -11,16 +11,20 @@ from tqdm import tqdm
 # CONFIG
 # --------------------------
 
+DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME = "CarperAI/openai_summarize_tldr"
+
 OUTPUT_DIR = "models/qwen3_sft_lora"
+
 BATCH_SIZE = 8
 LR = 2e-5
 NUM_EPOCHS = 1
-DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 MAX_INPUT_LEN = 512
 MAX_TARGET_LEN = 64
 MAX_TOTAL_LEN = MAX_INPUT_LEN + MAX_TARGET_LEN + 5  # extra for EOS etc.
+
 EVAL_INTERVAL = 100
 SAVE_INTERVAL = 1000
 
@@ -164,7 +168,7 @@ for epoch in range(NUM_EPOCHS):
             loss = outputs.loss
 
             loss.backward()
-            
+
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
