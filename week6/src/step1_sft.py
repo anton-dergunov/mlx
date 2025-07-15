@@ -193,7 +193,7 @@ for epoch in range(NUM_EPOCHS):
 
             prompt_text = tokenizer.decode(prompt_input_ids[0], skip_special_tokens=True)
             generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-            orig_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+            orig_text = tokenizer.decode(val_labels[0], skip_special_tokens=True)
 
             print("=== EVAL SAMPLE ===")
             print(f"**Prompt**: {prompt_text[:200]}...")
