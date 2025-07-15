@@ -1,10 +1,12 @@
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from torch.amp import autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
+from functools import partial
 from tqdm import tqdm
 
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
@@ -79,13 +81,58 @@ reward_model.eval()
 # Update the optimizer to target only the 'policy' adapter's parameters
 optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, policy_model.parameters()), lr=1e-5)
 
-# Load prompts
+# Load dataset
 dataset = load_dataset(DATASET_NAME, split="train")
 
-# FIXME Filter the dataset. For example as below, but use map function:
-# filtered_dataset = [ex for ex in dataset if ex["prompt"].strip().endswith("\nTL;DR:")]
+# Filter + preprocess in one go
+def preprocess_function(ex):
+    if not ex["prompt"].strip().endswith("\nTL;DR:"):
+        return {"keep": False}
 
-loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    prompt = "Summarize:\n" + ex["prompt"].strip() + " "
+    encoding = tokenizer(
+        prompt,
+        truncation=True,
+        max_length=MAX_LEN,
+    )
+    return {
+        "input_ids": encoding["input_ids"],
+        "attention_mask": encoding["attention_mask"],
+        "keep": True
+    }
+
+dataset = dataset.map(preprocess_function, remove_columns=dataset.column_names)
+dataset = dataset.filter(lambda ex: ex["keep"])
+dataset = dataset.with_format("torch")
+
+def collate_fn(batch):
+    input_ids = [ex["input_ids"] for ex in batch]
+    attention_masks = [ex["attention_mask"] for ex in batch]
+
+    # Left pad: pad_sequence defaults to right, so reverse → pad → reverse again
+    input_ids = [torch.tensor(x) for x in input_ids]
+    attention_masks = [torch.tensor(x) for x in attention_masks]
+
+    input_ids = [torch.flip(x, dims=[0]) for x in input_ids]
+    input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
+    input_ids = torch.flip(input_ids, dims=[1])
+
+    attention_masks = [torch.flip(x, dims=[0]) for x in attention_masks]
+    attention_masks = pad_sequence(attention_masks, batch_first=True, padding_value=0)
+    attention_masks = torch.flip(attention_masks, dims=[1])
+
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_masks
+    }
+
+loader = DataLoader(
+    dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    collate_fn=collate_fn,
+    num_workers=2
+)
 
 global_step = 0
 running_loss = 0.0
@@ -93,13 +140,8 @@ running_loss = 0.0
 for epoch in range(EPOCHS):
     loop = tqdm(loader)
     for batch in loop:
-        prompts = batch["prompt"]
-        prompts = ["Summarize:\n" + p.strip() + " " for p in prompts]
-
-        # Encode prompts
-        prompt_encoding = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
-        input_ids = prompt_encoding.input_ids.to(DEVICE)
-        attention_mask = prompt_encoding.attention_mask.to(DEVICE)
+        input_ids = batch["input_ids"].to(DEVICE)
+        attention_mask = batch["attention_mask"].to(DEVICE)
 
         # === 1) Rollout ===
         # Set the active adapter to 'policy' for generation
@@ -193,8 +235,11 @@ for epoch in range(EPOCHS):
         if global_step % EVAL_INTERVAL == 0:
             avg_loss = running_loss / max(1, EVAL_INTERVAL)
             running_loss = 0.0
+
+            prompt_text = tokenizer.decode(input_ids[0], skip_special_tokens=True)
+
             print(f"=== Step {global_step} ===")
-            print(f"**Prompt**: {prompts[0][:200]}...")
+            print(f"**Prompt**: {prompt_text[:200]}...")
             print(f"**Generated**: {generated[0][:200]}...")
             print(f"**Reward**: {reward[0].item():.4f}")
             print(f"**Avg PPO loss**: {avg_loss:.4f}")
