@@ -62,11 +62,14 @@ for epoch in range(EPOCHS):
         prompt = "Summarize:\n" + prompt.strip() + " "
 
         # Encode prompt
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(DEVICE)
+        prompt_encoding = tokenizer(prompt, return_tensors="pt", padding=True)
+        input_ids = prompt_encoding.input_ids.to(DEVICE)
+        attention_mask = prompt_encoding.attention_mask.to(DEVICE)
 
         # Generate summary
         output = policy_model.generate(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             max_new_tokens=MAX_LEN,
             do_sample=True,
             top_k=50,
@@ -79,16 +82,28 @@ for epoch in range(EPOCHS):
 
         # Compute reward
         full_ids = torch.cat([input_ids, completion.unsqueeze(0)], dim=1)
-        attention_mask = torch.ones_like(full_ids).to(DEVICE)
-        reward = reward_model(full_ids, attention_mask).detach()
+        full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
+        reward = reward_model(full_ids, full_attention_mask).detach()
 
         # Compute log probs under policy
         outputs = policy_model(
             input_ids=full_ids,
-            attention_mask=attention_mask,
-            labels=full_ids
+            attention_mask=full_attention_mask
         )
-        logprobs = -outputs.loss  # log likelihood is -loss for LM
+        logits = outputs.logits  # (batch, seq_len, vocab)
+
+        # Shift so tokens <t> predict <t+1>
+        logits = logits[:, :-1, :].contiguous()
+        labels = full_ids[:, 1:].contiguous()
+
+        # Cross-entropy manually
+        logprobs_per_token = -nn.functional.cross_entropy(
+            logits.view(-1, logits.size(-1)),
+            labels.view(-1),
+            reduction='none'
+        )
+
+        logprobs = logprobs_per_token.view(labels.shape).sum(dim=1)  # sum over tokens
 
         # REINFORCE loss: negative reward * log prob
         rl_loss = -reward * logprobs
