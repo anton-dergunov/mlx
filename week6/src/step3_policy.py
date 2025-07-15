@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from torch.cuda.amp import autocast
+# from torch.amp import autocast  # for CPU autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
@@ -114,23 +116,24 @@ for epoch in range(EPOCHS):
 
         # === 4) PPO update ===
         for ppo_epoch in range(PPO_EPOCHS):
-            outputs = policy_model(
-                input_ids=full_ids,
-                attention_mask=full_attention_mask
-            )
-            logits = outputs.logits[:, :-1, :]
-            labels = full_ids[:, 1:]
+            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                outputs = policy_model(
+                    input_ids=full_ids,
+                    attention_mask=full_attention_mask
+                )
+                logits = outputs.logits[:, :-1, :]
+                labels = full_ids[:, 1:]
 
-            log_probs = torch.log_softmax(logits, dim=-1)
-            log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-            logprobs = log_probs_for_labels.sum(dim=1)
+                log_probs = torch.log_softmax(logits, dim=-1)
+                log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                logprobs = log_probs_for_labels.sum(dim=1)
 
-            ratio = torch.exp(logprobs - old_logprobs.detach())
-            clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
-            surrogate1 = ratio * advantage
-            surrogate2 = clipped_ratio * advantage
+                ratio = torch.exp(logprobs - old_logprobs.detach())
+                clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+                surrogate1 = ratio * advantage
+                surrogate2 = clipped_ratio * advantage
 
-            ppo_loss = -torch.min(surrogate1, surrogate2).mean()
+                ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
             print("=== DEBUG ===")
             print(f"logprobs.requires_grad: {logprobs.requires_grad}")
