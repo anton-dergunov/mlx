@@ -16,13 +16,13 @@ EVAL_SIZE = 64
 SFT_ADAPTER_PATH = "models/qwen3_sft_lora"  # output from Step 1
 REWARD_OUTPUT_PATH = "models/qwen3_reward_lora"
 
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 LR = 1e-5
 EPOCHS = 1
 MAX_LEN = 512
 
-EVAL_INTERVAL = 1000
-SAVE_INTERVAL = 1000
+EVAL_INTERVAL = 25
+SAVE_INTERVAL = 200
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
