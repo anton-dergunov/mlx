@@ -121,17 +121,13 @@ for epoch in range(EPOCHS):
             logits = outputs.logits[:, :-1, :]
             labels = full_ids[:, 1:]
 
-            # 🚫 NO torch.no_grad() here!
-            logprobs_per_token = -nn.functional.cross_entropy(
-                logits.reshape(-1, logits.size(-1)),
-                labels.reshape(-1),
-                reduction='none'
-            )
-            logprobs = logprobs_per_token.view(labels.shape).sum(dim=1)
+            log_probs = torch.log_softmax(logits, dim=-1)
+            log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+            logprobs = log_probs_for_labels.sum(dim=1)
 
-            ratio = torch.exp(logprobs - old_logprobs.detach())  # detach old_logprobs only
+            ratio = torch.exp(logprobs - old_logprobs.detach())
             clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
-            surrogate1 = ratio * advantage  # advantage is constant, no grad
+            surrogate1 = ratio * advantage
             surrogate2 = clipped_ratio * advantage
             ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
