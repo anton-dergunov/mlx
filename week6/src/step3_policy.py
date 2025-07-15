@@ -39,9 +39,10 @@ class RewardModel(nn.Module):
         rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)  # (batch,)
         return rewards
 
-reward_model = RewardModel(base_model)
-reward_model = PeftModel.from_pretrained(reward_model, REWARD_ADAPTER_PATH)
-reward_model = reward_model.to(DEVICE)
+# Load base model for reward
+base_model_for_reward = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).to(DEVICE)
+reward_base = PeftModel.from_pretrained(base_model_for_reward, REWARD_ADAPTER_PATH)  # Load LoRA into base LM
+reward_model = RewardModel(reward_base).to(DEVICE)  # Then wrap it
 reward_model.eval()
 
 optimizer = torch.optim.AdamW(policy_model.parameters(), lr=1e-5)
