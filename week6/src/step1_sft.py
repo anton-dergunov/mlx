@@ -14,13 +14,13 @@ from tqdm import tqdm
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME = "CarperAI/openai_summarize_tldr"
 OUTPUT_DIR = "models/qwen3_sft_lora"
-BATCH_SIZE = 2
+BATCH_SIZE = 8
 LR = 2e-5
-NUM_EPOCHS = 0  # For testing
+NUM_EPOCHS = 1
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 MAX_INPUT_LEN = 512
 MAX_TARGET_LEN = 64
-EVAL_INTERVAL = 2
+EVAL_INTERVAL = 100
 
 # --------------------------
 # LOAD MODEL & TOKENIZER
@@ -106,35 +106,6 @@ def preprocess(examples):
         "labels": labels,
         "prompt_len": prompt_lens
     }
-
-def preprocess(examples):
-    inputs = ["summarize: " + doc for doc in examples["prompt"]]
-    targets = [label for label in examples["label"]]
-
-    input_encodings = tokenizer(
-        inputs,
-        max_length=MAX_INPUT_LEN,
-        truncation=True
-    )
-
-    target_encodings = tokenizer(
-        targets,
-        max_length=MAX_TARGET_LEN,
-        truncation=True,
-        add_special_tokens=False  # <- don't double add EOS if your tokenizer does it.
-    )
-
-    # Concatenate and mask
-    input_ids = []
-    labels = []
-
-    for inp_ids, tgt_ids in zip(input_encodings["input_ids"], target_encodings["input_ids"]):
-        ids = inp_ids + tgt_ids + [tokenizer.eos_token_id]
-        label = [-100] * len(inp_ids) + tgt_ids + [tokenizer.eos_token_id]
-        input_ids.append(ids)
-        labels.append(label)
-
-    return {"input_ids": input_ids, "labels": labels}
 
 train_tokenized = train_data.map(preprocess, batched=True, remove_columns=train_data.column_names)
 valid_tokenized = valid_data.map(preprocess, batched=True, remove_columns=valid_data.column_names)
