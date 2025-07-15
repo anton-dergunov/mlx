@@ -14,7 +14,7 @@ from tqdm import tqdm
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME = "CarperAI/openai_summarize_tldr"
 OUTPUT_DIR = "models/qwen3_sft_lora"
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 LR = 2e-5
 NUM_EPOCHS = 1
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
@@ -22,7 +22,7 @@ MAX_INPUT_LEN = 512
 MAX_TARGET_LEN = 64
 MAX_TOTAL_LEN = MAX_INPUT_LEN + MAX_TARGET_LEN + 5  # extra for EOS etc.
 EVAL_INTERVAL = 100
-SAVE_INTERVAL = 100
+SAVE_INTERVAL = 1000
 
 # --------------------------
 # LOAD MODEL & TOKENIZER
@@ -159,22 +159,23 @@ for epoch in range(NUM_EPOCHS):
         attention_mask = batch["attention_mask"].to(DEVICE)
         labels = batch["labels"].to(DEVICE)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
-
         try:
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+
             loss.backward()
+            
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
         except RuntimeError as e:
             if "out of memory" in str(e):
-                print("OOM! Skipping step, clearing cache.")
+                print(f"OOM! Skipping step. input_ids shape: {input_ids.shape}")
                 optimizer.zero_grad(set_to_none=True)
                 torch.cuda.empty_cache()
                 continue
             else:
                 raise
-        optimizer.step()
-        scheduler.step()
-        optimizer.zero_grad()
 
         running_loss += loss.item()
         loop.set_postfix(loss=loss.item())
