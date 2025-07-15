@@ -9,6 +9,9 @@ from datasets import load_dataset
 from functools import partial
 from tqdm import tqdm
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Fix tokenizer warnings
+
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
@@ -110,9 +113,6 @@ def collate_fn(batch):
     attention_masks = [ex["attention_mask"] for ex in batch]
 
     # Left pad: pad_sequence defaults to right, so reverse → pad → reverse again
-    input_ids = [torch.tensor(x) for x in input_ids]
-    attention_masks = [torch.tensor(x) for x in attention_masks]
-
     input_ids = [torch.flip(x, dims=[0]) for x in input_ids]
     input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
     input_ids = torch.flip(input_ids, dims=[1])
@@ -131,7 +131,8 @@ loader = DataLoader(
     batch_size=BATCH_SIZE,
     shuffle=True,
     collate_fn=collate_fn,
-    num_workers=2
+    num_workers=2,
+    pin_memory=True  # this helps CPU→GPU transfer
 )
 
 global_step = 0
@@ -202,33 +203,43 @@ for epoch in range(EPOCHS):
 
         # === 4) PPO update ===
         # Set the adapter back to 'policy' for the training step
-        policy_model.set_adapter("policy")
-        for ppo_epoch in range(PPO_EPOCHS):
-            with autocast(DEVICE, dtype=torch.bfloat16):
-                outputs = policy_model(
-                    input_ids=full_ids,
-                    attention_mask=full_attention_mask
-                )
-                logits = outputs.logits[:, :-1, :]
-                labels = full_ids[:, 1:]
+        try:
+            policy_model.set_adapter("policy")
+            for ppo_epoch in range(PPO_EPOCHS):
+                with autocast(DEVICE, dtype=torch.bfloat16):
+                    outputs = policy_model(
+                        input_ids=full_ids,
+                        attention_mask=full_attention_mask
+                    )
+                    logits = outputs.logits[:, :-1, :]
+                    labels = full_ids[:, 1:]
 
-                log_probs = torch.log_softmax(logits, dim=-1)
-                log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                logprobs = log_probs_for_labels.sum(dim=1)
+                    log_probs = torch.log_softmax(logits, dim=-1)
+                    log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                    logprobs = log_probs_for_labels.sum(dim=1)
 
-                ratio = torch.exp(logprobs - old_logprobs.detach())
-                clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
-                surrogate1 = ratio * advantage
-                surrogate2 = clipped_ratio * advantage
+                    ratio = torch.exp(logprobs - old_logprobs.detach())
+                    clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+                    surrogate1 = ratio * advantage
+                    surrogate2 = clipped_ratio * advantage
 
-                ppo_loss = -torch.min(surrogate1, surrogate2).mean()
+                    ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-            # The backward pass will now correctly only affect 'policy' adapter weights
-            optimizer.zero_grad()
-            ppo_loss.backward()
-            optimizer.step()
+                # The backward pass will now correctly only affect 'policy' adapter weights
+                optimizer.zero_grad()
+                ppo_loss.backward()
+                optimizer.step()
 
-            running_loss += ppo_loss.item()
+                running_loss += ppo_loss.item()
+
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print(f"⚠️ OOM at global_step={global_step} batch={input_ids.shape}")
+                optimizer.zero_grad(set_to_none=True)
+                torch.cuda.empty_cache()
+                continue
+            else:
+                raise
 
         global_step += 1
 
