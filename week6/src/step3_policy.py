@@ -72,7 +72,7 @@ reward_model = RewardModel(policy_model).to(DEVICE)
 reward_model.eval()
 
 # Update the optimizer to target only the 'policy' adapter's parameters
-optimizer = torch.optim.AdamW(policy_model.get_adapter('policy').parameters(), lr=1e-5)
+optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, policy_model.parameters()), lr=1e-5)
 
 # Load prompts
 dataset = load_dataset(DATASET_NAME, split="train")
