@@ -102,11 +102,11 @@ for epoch in range(EPOCHS):
         if i % PRINT_EVERY == 0:
             avg_loss = running_loss / PRINT_EVERY
             running_loss = 0.0
-            print(f"\n=== Step {i} ===")
-            print(f"Prompt: {prompt[:200]}...")
-            print(f"Generated: {generated[:200]}...")
-            print(f"Reward: {reward.item():.4f}")
-            print(f"Running RL loss: {avg_loss:.4f}")
+            print(f"=== Step {i} ===")
+            print(f"**Prompt**: {prompt[:200]}...")
+            print(f"**Generated**: {generated[:200]}...")
+            print(f"**Reward**: {reward.item():.4f}")
+            print(f"**Running RL loss**: {avg_loss:.4f}")
 
 # Save only LoRA weights
 policy_model.save_pretrained(POLICY_OUTPUT_PATH)

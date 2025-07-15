@@ -195,6 +195,7 @@ for epoch in range(NUM_EPOCHS):
             val_sample = next(iter(valid_loader))
             val_input_ids = val_sample["input_ids"].to(DEVICE)
             val_attention_mask = val_sample["attention_mask"].to(DEVICE)
+            val_labels = val_sample["labels"].to(DEVICE)
 
             # Generate
             generated_ids = model.generate(
@@ -205,10 +206,13 @@ for epoch in range(NUM_EPOCHS):
             )
             prompt_text = tokenizer.decode(val_input_ids[0], skip_special_tokens=True)
             generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+            orig_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-            print("\n=== EVAL SAMPLE ===")
-            print(f"Prompt: {prompt_text[:200]}...")
-            print(f"Generated: {generated_text[-200:]}\n")
+            print("=== EVAL SAMPLE ===")
+            print(f"**Prompt**: {prompt_text[:200]}...")
+            print(f"**Generated**: {generated_text[-200:]}\n")
+            print(f"**Original**: {orig_text[-200:]}\n")
+
             model.train()
 
 # --------------------------
