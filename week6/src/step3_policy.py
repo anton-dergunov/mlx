@@ -16,7 +16,6 @@ REWARD_ADAPTER_PATH = "models/qwen3_reward_lora"
 POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
 MAX_LEN = 256
-BATCH_SIZE = 16
 EPOCHS = 1
 
 PPO_EPOCHS = 4
@@ -84,7 +83,7 @@ global_step = 0
 running_loss = 0.0
 
 for epoch in range(EPOCHS):
-    loop = tqdm(range(0, len(dataset), BATCH_SIZE))
+    loop = tqdm(range(len(dataset)))
     for i in loop:
         ex = dataset[i]
         prompt = ex["prompt"]
