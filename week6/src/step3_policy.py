@@ -8,7 +8,7 @@ from tqdm import tqdm
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
-DATASET_NAME = "CarperAI/openai_summarize_comparisons"
+DATASET_NAME = "CarperAI/openai_summarize_tldr"
 
 SFT_ADAPTER_PATH = "models/qwen3_sft_lora"
 REWARD_ADAPTER_PATH = "models/qwen3_reward_lora"
