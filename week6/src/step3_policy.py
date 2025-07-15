@@ -16,12 +16,15 @@ REWARD_ADAPTER_PATH = "models/qwen3_reward_lora"
 POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
 MAX_LEN = 256
-BATCH_SIZE = 1
+BATCH_SIZE = 4
 EPOCHS = 1
-PRINT_EVERY = 10  # Print every N rollouts
 
 PPO_EPOCHS = 4
 CLIP_EPS = 0.2
+
+EVAL_INTERVAL = 100
+SAVE_INTERVAL = 400
+
 
 # --------------------------
 # LOAD MODELS & TOKENIZER
@@ -172,14 +175,20 @@ for epoch in range(EPOCHS):
 
             running_loss += ppo_loss.item()
 
-        if i % PRINT_EVERY == 0:
-            avg_loss = running_loss / max(1, PRINT_EVERY)
+        if i % EVAL_INTERVAL == 0:
+            avg_loss = running_loss / max(1, EVAL_INTERVAL)
             running_loss = 0.0
             print(f"=== Step {i} ===")
             print(f"**Prompt**: {prompt[:200]}...")
             print(f"**Generated**: {generated[:200]}...")
             print(f"**Reward**: {reward.item():.4f}")
             print(f"**Avg PPO loss**: {avg_loss:.4f}")
+
+        # Save LoRA checkpoint
+        if i % SAVE_INTERVAL == 0:
+            ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{i}"
+            policy_model.save_pretrained(ckpt_path)
+            print(f"Saved interim LoRA to {ckpt_path}")
 
 # Save only LoRA weights
 policy_model.save_pretrained(POLICY_OUTPUT_PATH)
