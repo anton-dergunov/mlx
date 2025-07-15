@@ -14,13 +14,15 @@ from tqdm import tqdm
 MODEL_NAME = "Qwen/Qwen3-0.6B-Base"
 DATASET_NAME = "CarperAI/openai_summarize_tldr"
 OUTPUT_DIR = "models/qwen3_sft_lora"
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 LR = 2e-5
 NUM_EPOCHS = 1
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 MAX_INPUT_LEN = 512
 MAX_TARGET_LEN = 64
+MAX_TOTAL_LEN = MAX_INPUT_LEN + MAX_TARGET_LEN + 5  # extra for EOS etc.
 EVAL_INTERVAL = 100
+SAVE_INTERVAL = 100
 
 # --------------------------
 # LOAD MODEL & TOKENIZER
@@ -96,6 +98,9 @@ def preprocess(examples):
     prompt_lens = []
 
     for inp_ids, tgt_ids in zip(input_encodings["input_ids"], target_encodings["input_ids"]):
+        if len(inp_ids) + len(tgt_ids) > MAX_TOTAL_LEN:
+            print(f"SKIPPING: input+target too long ({len(inp_ids)} + {len(tgt_ids)})")
+            continue
         ids = inp_ids + tgt_ids + [tokenizer.eos_token_id]
         label = [-100] * len(inp_ids) + tgt_ids + [tokenizer.eos_token_id]
         input_ids.append(ids)
@@ -157,7 +162,16 @@ for epoch in range(NUM_EPOCHS):
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
         loss = outputs.loss
 
-        loss.backward()
+        try:
+            loss.backward()
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print("OOM! Skipping step, clearing cache.")
+                optimizer.zero_grad(set_to_none=True)
+                torch.cuda.empty_cache()
+                continue
+            else:
+                raise
         optimizer.step()
         scheduler.step()
         optimizer.zero_grad()
@@ -191,9 +205,10 @@ for epoch in range(NUM_EPOCHS):
                 pad_token_id=tokenizer.pad_token_id,
                 num_beams=4
             )
+            gen_tokens_only = generated_ids[:, val_prompt_len:]
 
             prompt_text = tokenizer.decode(prompt_input_ids[0], skip_special_tokens=True)
-            generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+            generated_text = tokenizer.decode(gen_tokens_only[0], skip_special_tokens=True)
             orig_text = tokenizer.decode(label_ids[0], skip_special_tokens=True)
 
             print("=== EVAL SAMPLE ===")
@@ -202,6 +217,11 @@ for epoch in range(NUM_EPOCHS):
             print(f"**Original**: {orig_text[-200:]}\n")
 
             model.train()
+
+        if global_step % SAVE_INTERVAL == 0:
+            ckpt_path = f"{OUTPUT_DIR}_ckpt_step_{global_step}"
+            model.save_pretrained(ckpt_path)
+            print(f"Saved interim LoRA to {ckpt_path}")
 
 # --------------------------
 # SAVE LoRA ONLY
