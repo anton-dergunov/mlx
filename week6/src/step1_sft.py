@@ -74,7 +74,8 @@ def preprocess(examples):
             print("WARNING: label has TL;DR:, skipping.")
             continue
 
-        full_prompt = "Summarize:\n" + prompt.strip() + "\nTL;DR:"
+        # CarperAI/openai_summarize_comparisons dataset contains a space after "TL;DR:"
+        full_prompt = "Summarize:\n" + prompt.strip() + " "
         inputs.append(full_prompt)
         targets.append(label.strip())
 
@@ -177,11 +178,11 @@ for epoch in range(NUM_EPOCHS):
             val_input_ids = val_sample["input_ids"].to(DEVICE)
             val_attention_mask = val_sample["attention_mask"].to(DEVICE)
             val_prompt_len = val_sample["prompt_len"].to(DEVICE)
-            val_labels = val_sample["labels"].to(DEVICE)
 
             # Only take the prompt portion
             prompt_input_ids = val_input_ids[:, :val_prompt_len]
             prompt_attention_mask = val_attention_mask[:, :val_prompt_len]
+            label_ids = val_input_ids[:, val_prompt_len:]
 
             generated_ids = model.generate(
                 input_ids=prompt_input_ids,
@@ -193,7 +194,7 @@ for epoch in range(NUM_EPOCHS):
 
             prompt_text = tokenizer.decode(prompt_input_ids[0], skip_special_tokens=True)
             generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-            orig_text = tokenizer.decode(val_labels[0], skip_special_tokens=True)
+            orig_text = tokenizer.decode(label_ids[0], skip_special_tokens=True)
 
             print("=== EVAL SAMPLE ===")
             print(f"**Prompt**: {prompt_text[:200]}...")
