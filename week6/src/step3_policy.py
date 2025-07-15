@@ -30,38 +30,27 @@ CLIP_EPS = 0.2
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
 
-# 1. Load the base model ONCE
-model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
-# Prepare the base model for k-bit training before adding adapters
-model = prepare_model_for_kbit_training(model)
+# 1. Load the base model and prepare it for k-bit training
+base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+base_model = prepare_model_for_kbit_training(base_model)
 
-# 2. Add all necessary adapters by first loading their configs
-# The SFT adapter serves as our non-trainable reference
-sft_config = LoraConfig.from_pretrained(SFT_ADAPTER_PATH)
-model.add_adapter(sft_config, adapter_name="sft")
-print("Loaded SFT adapter.")
+# 2. Load the first adapter (SFT) to create the main PeftModel
+# This is now our primary model object. The first adapter is automatically named 'sft'.
+policy_model = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="sft")
+print("Initialized PeftModel with SFT adapter as 'sft'.")
 
-# The reward adapter is for scoring
-reward_config = LoraConfig.from_pretrained(REWARD_ADAPTER_PATH)
-model.add_adapter(reward_config, adapter_name="reward")
-print("Loaded Reward adapter.")
+# 3. Load the additional adapters into the existing PeftModel
+# Load the reward adapter and name it 'reward'
+policy_model.load_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
+print("Loaded adapter 'reward'.")
 
-# The policy adapter starts as a copy of SFT and is the one we will train
-# We use the SFT config but will train a new set of weights under the 'policy' name
-model.add_adapter(sft_config, adapter_name="policy")
-print("Added Policy adapter.")
+# Load the SFT weights again, but this time give them the new name 'policy'
+# This creates our trainable policy adapter, initialized from the SFT checkpoint.
+policy_model.load_adapter(SFT_ADAPTER_PATH, adapter_name="policy")
+print("Loaded SFT weights as new adapter 'policy'.")
 
-
-# 3. Load the weights into the adapters
-# For sft and reward, we load their pre-trained weights.
-# For 'policy', we initialize it with the SFT weights, which serves as our starting point.
-model.load_adapter(SFT_ADAPTER_PATH, adapter_name="sft")
-model.load_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
-model.load_adapter(SFT_ADAPTER_PATH, adapter_name="policy") # Initialize policy with SFT weights
-print("Loaded adapter weights.")
-
-# Our main "policy_model" is now this single, multi-adapter model
-policy_model = model.to(DEVICE)
+# Move the final multi-adapter model to the device
+policy_model.to(DEVICE)
 
 # 4. Define and instantiate the RewardModel wrapper
 # It will use the SAME underlying model but with a specific head
