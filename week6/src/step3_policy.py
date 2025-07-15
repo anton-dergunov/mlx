@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-from torch.cuda.amp import autocast
-# from torch.amp import autocast  # for CPU autocast
+from torch.amp import autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
