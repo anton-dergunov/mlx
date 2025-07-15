@@ -16,7 +16,7 @@ REWARD_ADAPTER_PATH = "models/qwen3_reward_lora"
 POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
 MAX_LEN = 256
-BATCH_SIZE = 4
+BATCH_SIZE = 16
 EPOCHS = 1
 
 PPO_EPOCHS = 4
@@ -80,6 +80,7 @@ optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, policy_model.par
 # Load prompts
 dataset = load_dataset(DATASET_NAME, split="train")
 
+global_step = 0
 running_loss = 0.0
 
 for epoch in range(EPOCHS):
@@ -175,18 +176,20 @@ for epoch in range(EPOCHS):
 
             running_loss += ppo_loss.item()
 
-        if i % EVAL_INTERVAL == 0:
+        global_step += 1
+
+        if global_step % EVAL_INTERVAL == 0:
             avg_loss = running_loss / max(1, EVAL_INTERVAL)
             running_loss = 0.0
-            print(f"=== Step {i} ===")
+            print(f"=== Step {global_step} ===")
             print(f"**Prompt**: {prompt[:200]}...")
             print(f"**Generated**: {generated[:200]}...")
             print(f"**Reward**: {reward.item():.4f}")
             print(f"**Avg PPO loss**: {avg_loss:.4f}")
 
         # Save LoRA checkpoint
-        if i % SAVE_INTERVAL == 0:
-            ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{i}"
+        if global_step % SAVE_INTERVAL == 0:
+            ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{global_step}"
             policy_model.save_pretrained(ckpt_path)
             print(f"Saved interim LoRA to {ckpt_path}")
 
