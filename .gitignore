@@ -13,3 +13,4 @@ week1/glove.6B.zip
 *.pyc
 week2/models/
 certificate.pem
+week6/models/*

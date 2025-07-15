@@ -10,3 +10,6 @@ https://huggingface.co/datasets/CarperAI/openai_summarize_comparisons
 
 https://github.com/freemvmt/torchpod
 
+https://www.youtube.com/watch?v=TjHH_--7l8g&t=1010s
+https://claude.ai/public/artifacts/5a243f70-68be-4acb-8428-d8d596de090b
+
