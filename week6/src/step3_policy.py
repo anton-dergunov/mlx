@@ -1,8 +1,9 @@
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 from torch.amp import autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
+from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
 from tqdm import tqdm
 
@@ -17,6 +18,7 @@ POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
 MAX_LEN = 256
 EPOCHS = 1
+BATCH_SIZE = 4
 
 PPO_EPOCHS = 4
 CLIP_EPS = 0.2
@@ -79,21 +81,22 @@ optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, policy_model.par
 # Load prompts
 dataset = load_dataset(DATASET_NAME, split="train")
 
+# FIXME Filter the dataset. For example as below, but use map function:
+# filtered_dataset = [ex for ex in dataset if ex["prompt"].strip().endswith("\nTL;DR:")]
+
+loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
 global_step = 0
 running_loss = 0.0
 
 for epoch in range(EPOCHS):
-    loop = tqdm(range(len(dataset)))
-    for i in loop:
-        ex = dataset[i]
-        prompt = ex["prompt"]
-        if not prompt.strip().endswith("\nTL;DR:"):
-            print("WARNING: prompt does not end with TL;DR:, skipping.")
-            continue
-        prompt = "Summarize:\n" + prompt.strip() + " "
+    loop = tqdm(loader)
+    for batch in loop:
+        prompts = batch["prompt"]
+        prompts = ["Summarize:\n" + p.strip() + " " for p in prompts]
 
-        # Encode prompt
-        prompt_encoding = tokenizer(prompt, return_tensors="pt", padding=True)
+        # Encode prompts
+        prompt_encoding = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
         input_ids = prompt_encoding.input_ids.to(DEVICE)
         attention_mask = prompt_encoding.attention_mask.to(DEVICE)
 
@@ -111,11 +114,20 @@ for epoch in range(EPOCHS):
                 top_k=50,
                 top_p=0.95,
                 temperature=1.0,
-                pad_token_id=tokenizer.eos_token_id)
-        completion = output[0][input_ids.shape[1]:]
-        generated = tokenizer.decode(completion, skip_special_tokens=True)
+                pad_token_id=tokenizer.eos_token_id
+            )
 
-        full_ids = torch.cat([input_ids, completion.unsqueeze(0)], dim=1)
+        # Detach completions
+        completions = []
+        for j in range(BATCH_SIZE):
+            gen = output[j][input_ids.shape[1]:]
+            completions.append(gen.unsqueeze(0))
+        completions = torch.cat(completions, dim=0)
+
+        generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(BATCH_SIZE)]
+
+        # Combine prompt + generated
+        full_ids = torch.cat([input_ids, completions], dim=1)
         full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
 
         # === 2) Reward ===
@@ -181,9 +193,9 @@ for epoch in range(EPOCHS):
             avg_loss = running_loss / max(1, EVAL_INTERVAL)
             running_loss = 0.0
             print(f"=== Step {global_step} ===")
-            print(f"**Prompt**: {prompt[:200]}...")
-            print(f"**Generated**: {generated[:200]}...")
-            print(f"**Reward**: {reward.item():.4f}")
+            print(f"**Prompt**: {prompts[0][:200]}...")
+            print(f"**Generated**: {generated[0][:200]}...")
+            print(f"**Reward**: {reward[0].item():.4f}")
             print(f"**Avg PPO loss**: {avg_loss:.4f}")
 
         # Save LoRA checkpoint
