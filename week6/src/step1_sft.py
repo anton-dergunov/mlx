@@ -126,6 +126,7 @@ scheduler = get_linear_schedule_with_warmup(optimizer, 0, num_training_steps)
 model.train()
 
 global_step = 0
+running_loss = 0.0
 for epoch in range(NUM_EPOCHS):
     loop = tqdm(train_loader, desc=f"Epoch {epoch+1}")
     for batch in loop:
@@ -141,10 +142,15 @@ for epoch in range(NUM_EPOCHS):
         scheduler.step()
         optimizer.zero_grad()
 
+        running_loss += loss.item()
         loop.set_postfix(loss=loss.item())
         global_step += 1
 
         if global_step % EVAL_INTERVAL == 0:
+            avg_loss = running_loss / EVAL_INTERVAL
+            print(f"\n[global_step {global_step}] Running train loss (avg over last {EVAL_INTERVAL} steps): {avg_loss:.4f}")
+            running_loss = 0.0
+
             model.eval()
             # Take one random sample
             val_sample = next(iter(valid_loader))
