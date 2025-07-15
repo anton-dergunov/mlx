@@ -31,7 +31,7 @@ class RewardModel(nn.Module):
     def __init__(self, base_lm):
         super().__init__()
         self.base_lm = base_lm
-        self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False)
+        self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
 
     def forward(self, input_ids, attention_mask):
         output = self.base_lm(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
