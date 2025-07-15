@@ -53,7 +53,7 @@ dataset = load_dataset(DATASET_NAME)
 
 # Use train and valid splits
 train_data = dataset["train"]
-valid_data = dataset["valid1"].select(EVAL_SIZE)
+valid_data = dataset["valid1"].select(range(EVAL_SIZE))
 
 def preprocess(ex):
     prompt = ex["prompt"]
