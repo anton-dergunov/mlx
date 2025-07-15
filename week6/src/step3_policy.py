@@ -23,35 +23,50 @@ PRINT_EVERY = 10  # Print every N rollouts
 PPO_EPOCHS = 4
 CLIP_EPS = 0.2
 
+# --------------------------
+# LOAD MODELS & TOKENIZER
+# --------------------------
+
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
 
-# Load SFT model as policy
-base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).to(DEVICE)
-policy_model = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH)
-policy_model = prepare_model_for_kbit_training(policy_model)
-policy_model.train()
+# 1. Load the base model ONCE
+model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+# Prepare the base model for k-bit training before adding adapters
+model = prepare_model_for_kbit_training(model)
 
-# Load reward model
+# 2. Add all necessary adapters to this single model object
+# The SFT adapter serves as our non-trainable reference
+model.add_adapter(SFT_ADAPTER_PATH, adapter_name="sft")
+# The reward adapter is for scoring
+model.add_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
+# The policy adapter starts as a copy of SFT and is the one we will train
+model.add_adapter(SFT_ADAPTER_PATH, adapter_name="policy")
+
+# Our main "policy_model" is now this single, multi-adapter model
+policy_model = model.to(DEVICE)
+
+# 3. Define and instantiate the RewardModel wrapper
+# It will use the SAME underlying model but with a specific head
 class RewardModel(nn.Module):
     def __init__(self, base_lm):
         super().__init__()
         self.base_lm = base_lm
+        # NOTE: You might need to load saved weights for this head from your reward training step
         self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
 
     def forward(self, input_ids, attention_mask):
+        # We expect the 'reward' adapter to be active on self.base_lm
         output = self.base_lm(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-        last_hidden = output.hidden_states[-1]  # (batch, seq_len, hidden)
-        rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)  # (batch,)
+        last_hidden = output.hidden_states[-1]
+        rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)
         return rewards
 
-# Load base model for reward
-base_model_for_reward = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).to(DEVICE)
-reward_base = PeftModel.from_pretrained(base_model_for_reward, REWARD_ADAPTER_PATH)  # Load LoRA into base LM
-reward_model = RewardModel(reward_base).to(DEVICE)  # Then wrap it
+reward_model = RewardModel(policy_model).to(DEVICE)
 reward_model.eval()
 
-optimizer = torch.optim.AdamW(policy_model.parameters(), lr=1e-5)
+# Update the optimizer to target only the 'policy' adapter's parameters
+optimizer = torch.optim.AdamW(policy_model.get_adapter('policy').parameters(), lr=1e-5)
 
 # Load prompts
 dataset = load_dataset(DATASET_NAME, split="train")
@@ -74,6 +89,10 @@ for epoch in range(EPOCHS):
         attention_mask = prompt_encoding.attention_mask.to(DEVICE)
 
         # === 1) Rollout ===
+        # Set the active adapter to 'policy' for generation
+        policy_model.set_adapter("policy")
+        policy_model.train() # Use train mode for generation to ensure dropout is active if it was during SFT
+
         with torch.no_grad():
             output = policy_model.generate(
                 input_ids=input_ids,
@@ -83,8 +102,7 @@ for epoch in range(EPOCHS):
                 top_k=50,
                 top_p=0.95,
                 temperature=1.0,
-                pad_token_id=tokenizer.eos_token_id,
-            )
+                pad_token_id=tokenizer.eos_token_id)
         completion = output[0][input_ids.shape[1]:]
         generated = tokenizer.decode(completion, skip_special_tokens=True)
 
@@ -92,10 +110,15 @@ for epoch in range(EPOCHS):
         full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
 
         # === 2) Reward ===
+        # Set the active adapter to 'reward' for scoring
+        policy_model.set_adapter("reward")
         with torch.no_grad():
+            # The reward_model uses the policy_model internally, which now has the 'reward' adapter active
             reward = reward_model(full_ids, full_attention_mask).detach()
 
         # === 3) Compute old log probs ===
+        # Set the active adapter to 'sft' (our fixed reference)
+        policy_model.set_adapter("sft")
         with torch.no_grad():
             old_outputs = policy_model(
                 input_ids=full_ids,
@@ -114,8 +137,10 @@ for epoch in range(EPOCHS):
         advantage = reward  # simple version, no baseline
 
         # === 4) PPO update ===
+        # Set the adapter back to 'policy' for the training step
+        policy_model.set_adapter("policy")
         for ppo_epoch in range(PPO_EPOCHS):
-            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+            with autocast(DEVICE, dtype=torch.bfloat16):
                 outputs = policy_model(
                     input_ids=full_ids,
                     attention_mask=full_attention_mask
@@ -134,11 +159,7 @@ for epoch in range(EPOCHS):
 
                 ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-            print("=== DEBUG ===")
-            print(f"logprobs.requires_grad: {logprobs.requires_grad}")
-            print(f"ratio.requires_grad: {ratio.requires_grad}")
-            print(f"ppo_loss.requires_grad: {ppo_loss.requires_grad}")
-
+            # The backward pass will now correctly only affect 'policy' adapter weights
             optimizer.zero_grad()
             ppo_loss.backward()
             optimizer.step()
