@@ -68,7 +68,6 @@ class RewardModel(nn.Module):
     def __init__(self, base_lm):
         super().__init__()
         self.base_lm = base_lm
-        # NOTE: You might need to load saved weights for this head from your reward training step
         self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
 
     def forward(self, input_ids, attention_mask):
@@ -79,6 +78,13 @@ class RewardModel(nn.Module):
         return rewards
 
 reward_model = RewardModel(policy_model).to(DEVICE)
+
+# Also load the reward head
+head_weights_path = os.path.join(REWARD_ADAPTER_PATH, "reward_head.pt")
+state_dict = torch.load(head_weights_path, map_location=DEVICE)
+reward_model.reward_head.load_state_dict(state_dict)
+print(f"✅ Loaded reward head weights from: {head_weights_path}")
+
 reward_model.eval()
 
 # Update the optimizer to target only the 'policy' adapter's parameters

@@ -6,6 +6,7 @@ from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
+import os
 
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -165,12 +166,14 @@ for epoch in range(EPOCHS):
             print(f"\n[global_step {global_step}] Val loss: {avg_val_loss:.4f}")
             reward_model.train()
 
-        # Save LoRA checkpoint
+        # Save LoRA checkpoint and reward head
         if global_step % SAVE_INTERVAL == 0:
             ckpt_path = f"{REWARD_OUTPUT_PATH}_ckpt_step_{global_step}"
             model.save_pretrained(ckpt_path)
-            print(f"Saved interim LoRA to {ckpt_path}")
+            torch.save(reward_model.reward_head.state_dict(), os.path.join(ckpt_path, "reward_head.pt"))
+            print(f"Saved interim LoRA and reward head to {ckpt_path}")
 
-# Save only LoRA
+# Save final LoRA and reward head
 model.save_pretrained(REWARD_OUTPUT_PATH)
-print(f"Reward LoRA adapter saved to {REWARD_OUTPUT_PATH}")
+torch.save(reward_model.reward_head.state_dict(), os.path.join(REWARD_OUTPUT_PATH, "reward_head.pt"))
+print(f"Reward LoRA adapter and head saved to {REWARD_OUTPUT_PATH}")

@@ -134,11 +134,9 @@ print_step 5 "Upgrading PyTorch"
 pip install torch -U
 pip install torchvision -U
 
-print_step 6 "Installing VIM, nvtop, tmux"
+print_step 6 "Installing VIM, nvtop, tmux, zip, unzip, rsync"
 apt update
-apt install vim -y
-apt install nvtop -y
-apt install tmux -y
+apt install vim nvtop tmux zip unzip rsync -y
 
 echo
 echo "✅ Remote environment setup complete!"
