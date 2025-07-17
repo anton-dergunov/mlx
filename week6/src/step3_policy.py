@@ -6,7 +6,6 @@ from torch.amp import autocast
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
-from functools import partial
 from tqdm import tqdm
 
 import os
@@ -119,7 +118,7 @@ optimizer = torch.optim.AdamW(
 dataset = load_dataset(DATASET_NAME, split="train")
 
 # Filter + preprocess in one go
-def preprocess_function(ex):
+def preprocess(ex):
     if not ex["prompt"].strip().endswith("\nTL;DR:"):
         return {"keep": False}
 
@@ -135,7 +134,7 @@ def preprocess_function(ex):
         "keep": True
     }
 
-dataset = dataset.map(preprocess_function, remove_columns=dataset.column_names)
+dataset = dataset.map(preprocess, remove_columns=dataset.column_names)
 dataset = dataset.filter(lambda ex: ex["keep"])
 dataset = dataset.with_format("torch")
 
