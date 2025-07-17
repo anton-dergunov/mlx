@@ -46,29 +46,41 @@ tokenizer.padding_side = "left"  # do the padding on the left side for generate 
 base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
 base_model = prepare_model_for_kbit_training(base_model)
 
-# 2. Load the first adapter (SFT) to create the main PeftModel
-# This is now our primary model object. The first adapter is automatically named 'sft'.
-policy_model = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="sft")
-print("Initialized PeftModel with SFT adapter as 'sft'.")
+policy_lm = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="policy")
+print("Initialized policy model.")
 
-# 3. Load the additional adapters into the existing PeftModel
-# Load the reward adapter and name it 'reward'
-policy_model.load_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
-print("Loaded adapter 'reward'.")
+reward_lm = PeftModel.from_pretrained(base_model, REWARD_ADAPTER_PATH, adapter_name="reward")
+print("Initialized reward model.")
 
-# Load the SFT weights again, but this time give them the new name 'policy'
-# This creates our trainable policy adapter, initialized from the SFT checkpoint.
-policy_model.load_adapter(SFT_ADAPTER_PATH, adapter_name="policy")
-print("Loaded SFT weights as new adapter 'policy'.")
+reference_lm = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="sft")
+print("Initialized reference model.")
 
-# Move the final multi-adapter model to the device
-policy_model.to(DEVICE)
+policy_lm.to(DEVICE)
+reward_lm.to(DEVICE)
+reference_lm.to(DEVICE)
 
-# Compile to speed up flash attention & transformer decoding
-torch.backends.cuda.enable_mem_efficient_sdp(True)
-torch.backends.cuda.enable_flash_sdp(True)
-torch.set_float32_matmul_precision("high")
-policy_model = torch.compile(policy_model)
+class RewardModel(nn.Module):
+    def __init__(self, base_lm):
+        super().__init__()
+        self.base_lm = base_lm
+        self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
+
+    def forward(self, input_ids, attention_mask):
+        # We expect the 'reward' adapter to be active on self.base_lm
+        output = self.base_lm(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+        last_hidden = output.hidden_states[-1]
+        rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)
+        return rewards
+
+reward_model = RewardModel(reward_lm).to(DEVICE)
+
+# Also load the reward head
+head_weights_path = os.path.join(REWARD_ADAPTER_PATH, "reward_head.pt")
+state_dict = torch.load(head_weights_path, map_location=DEVICE)
+reward_model.reward_head.load_state_dict(state_dict)
+print(f"Loaded reward head weights from: {head_weights_path}")
+
+reward_model.eval()
 
 # Extend policy model with value head (to provide the predicted value of the state under the policy)
 class PolicyWithValue(nn.Module):
@@ -83,36 +95,19 @@ class PolicyWithValue(nn.Module):
         values = self.value_head(last_hidden[:, -1, :]).squeeze(-1)  # (batch,)
         return output, values
     
-policy_model_with_value = PolicyWithValue(policy_model).to(DEVICE)
+policy_model_with_value = PolicyWithValue(policy_lm).to(DEVICE)
 
-# 4. Define and instantiate the RewardModel wrapper
-# It will use the SAME underlying model but with a specific head
-class RewardModel(nn.Module):
-    def __init__(self, base_lm):
-        super().__init__()
-        self.base_lm = base_lm
-        self.reward_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
+# At top-level
+torch.backends.cuda.enable_flash_sdp(True)
+torch.set_float32_matmul_precision("high")
 
-    def forward(self, input_ids, attention_mask):
-        # We expect the 'reward' adapter to be active on self.base_lm
-        output = self.base_lm(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-        last_hidden = output.hidden_states[-1]
-        rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)
-        return rewards
-
-reward_model = RewardModel(policy_model).to(DEVICE)
-
-# Also load the reward head
-head_weights_path = os.path.join(REWARD_ADAPTER_PATH, "reward_head.pt")
-state_dict = torch.load(head_weights_path, map_location=DEVICE)
-reward_model.reward_head.load_state_dict(state_dict)
-print(f"Loaded reward head weights from: {head_weights_path}")
-
-reward_model.eval()
+# Compile once
+policy_model_with_value = torch.compile(policy_model_with_value)
+reward_model = torch.compile(reward_model)
 
 # Update the optimizer to target only the 'policy' adapter's parameters and value_head params
 optimizer = torch.optim.AdamW(
-    list(filter(lambda p: p.requires_grad, policy_model.parameters())) +
+    list(filter(lambda p: p.requires_grad, policy_lm.parameters())) +
     list(policy_model_with_value.value_head.parameters()),
     lr=LR
 )
@@ -172,20 +167,16 @@ loader = DataLoader(
 global_step = 0
 running_loss = 0.0
 
+# Training loop
 for epoch in range(EPOCHS):
-    loop = tqdm(loader)
-    for batch in loop:
+    for batch in tqdm(loader):
         try:
             input_ids = batch["input_ids"].to(DEVICE)
             attention_mask = batch["attention_mask"].to(DEVICE)
 
             # === 1) Rollout ===
-            # Set the active adapter to 'policy' for generation
-            policy_model.set_adapter("policy")
-            policy_model.train() # Use train mode for generation to ensure dropout is active if it was during SFT
-
-            with torch.inference_mode(), autocast(device_type=DEVICE, dtype=torch.bfloat16):
-                output = policy_model.generate(
+            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                output = policy_lm.generate(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     max_new_tokens = MAX_NEW_TOKENS,
@@ -193,83 +184,53 @@ for epoch in range(EPOCHS):
                     top_k=50,
                     top_p=0.95,
                     temperature=1.0,
-                    pad_token_id=tokenizer.eos_token_id
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=True
                 )
 
-            current_batch_size = input_ids.size(0)
             completions = output[:, input_ids.shape[1]:]
-
-            generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(current_batch_size)]
-
-            # Combine prompt + generated
             full_ids = torch.cat([input_ids, completions], dim=1)
             full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
 
             # === 2) Reward ===
-            # Set the active adapter to 'reward' for scoring
-            policy_model.set_adapter("reward")
             with torch.no_grad():
-                # The reward_model uses the policy_model internally, which now has the 'reward' adapter active
-                reward = reward_model(full_ids, full_attention_mask).detach()
+                reward = reward_model(full_ids, full_attention_mask)
 
-            # === 3) Compute old log probs ===
-            # Set the active adapter to 'sft' (our fixed reference)
-            policy_model.set_adapter("sft")
+            # === 3) Old log probs ===
             with torch.no_grad():
-                old_outputs = policy_model(
-                    input_ids=full_ids,
-                    attention_mask=full_attention_mask
-                )
-                old_logits = old_outputs.logits[:, :-1, :]
-                old_labels = full_ids[:, 1:]
-
-                old_logprobs_per_token = -nn.functional.cross_entropy(
-                    old_logits.reshape(-1, old_logits.size(-1)),
-                    old_labels.reshape(-1),
-                    reduction='none'
-                )
-                old_logprobs = old_logprobs_per_token.view(old_labels.shape).sum(dim=1)
+                old_outputs = reference_lm(input_ids=full_ids, attention_mask=full_attention_mask)
+                logits = old_outputs.logits[:, :-1, :]
+                labels = full_ids[:, 1:]
+                log_probs = torch.log_softmax(logits, dim=-1)
+                token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                old_logprobs = token_log_probs.sum(dim=1)
 
             # === 4) PPO update ===
-            # Set the adapter back to 'policy' for the training step
-            policy_model.set_adapter("policy")
-            for ppo_epoch in range(PPO_EPOCHS):
-                with autocast(DEVICE, dtype=torch.bfloat16):
-                    outputs, values = policy_model_with_value(
-                        input_ids=full_ids,
-                        attention_mask=full_attention_mask
-                    )
+            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                outputs, values = policy_model_with_value(full_ids, full_attention_mask)
+                logits = outputs.logits[:, :-1, :]
+                log_probs = torch.log_softmax(logits, dim=-1)
+                token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                new_logprobs = token_log_probs.sum(dim=1)
 
-                    logits = outputs.logits[:, :-1, :]
-                    labels = full_ids[:, 1:]
+                ratio = torch.exp(new_logprobs - old_logprobs.detach())
+                clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
 
-                    log_probs = torch.log_softmax(logits, dim=-1)
-                    log_probs_for_labels = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                    logprobs = log_probs_for_labels.sum(dim=1)
+                reward = torch.clamp(reward, -5.0, 5.0)
+                advantage = (reward - values).detach()
 
-                    ratio = torch.exp(logprobs - old_logprobs.detach())
-                    clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+                surrogate1 = ratio * advantage
+                surrogate2 = clipped_ratio * advantage
+                ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-                    # Clip reward to avoid unbounded rewards
-                    reward = torch.clamp(reward, -5.0, 5.0)
-                    # Advantage = reward - value
-                    advantage = (reward - values).detach()
+                value_loss = nn.functional.mse_loss(values, reward)
+                total_loss = ppo_loss + value_loss
 
-                    surrogate1 = ratio * advantage
-                    surrogate2 = clipped_ratio * advantage
+            optimizer.zero_grad()
+            total_loss.backward()
+            optimizer.step()
 
-                    ppo_loss = -torch.min(surrogate1, surrogate2).mean()
-
-                    # Add a value loss too (MSE)
-                    value_loss = nn.functional.mse_loss(values, reward)
-
-                    total_loss = ppo_loss + value_loss
-
-                optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
-
-                running_loss += total_loss.item()
+            running_loss += total_loss.item()
 
         except RuntimeError as e:
             if "out of memory" in str(e):
@@ -287,21 +248,22 @@ for epoch in range(EPOCHS):
             running_loss = 0.0
 
             prompt_text = tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            generated_text = tokenizer.decode(completions[0], skip_special_tokens=True)
 
             print(f"=== Step {global_step} ===")
             print(f"**Prompt**: {prompt_text[:200]}...")
-            print(f"**Generated**: {generated[0][:200]}...")
+            print(f"**Generated**: {generated_text[:200]}...")
             print(f"**Reward**: {reward[0].item():.4f}")
             print(f"**Avg PPO loss**: {avg_loss:.4f}")
 
         # Save LoRA checkpoint
         if global_step % SAVE_INTERVAL == 0:
             ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{global_step}"
-            policy_model.save_pretrained(ckpt_path)
+            policy_lm.save_pretrained(ckpt_path)
             torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(ckpt_path, "value_head.pt"))
             print(f"Saved interim LoRA and value head to {ckpt_path}")
 
 # Save only LoRA weights
-policy_model.save_pretrained(POLICY_OUTPUT_PATH)
+policy_lm.save_pretrained(POLICY_OUTPUT_PATH)
 torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(POLICY_OUTPUT_PATH, "value_head.pt"))
 print(f"Saved policy LoRA adapter and value head to {POLICY_OUTPUT_PATH}")
