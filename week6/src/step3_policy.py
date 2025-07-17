@@ -43,24 +43,24 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"  # do the padding on the left side for generate such as [PAD PAD prompt prompt prompt]
 
-# Separate base instances
-base_model_policy = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
-base_model_reward = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
-base_model_reference = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+# --- 1. Load the base model only ONCE ---
+base_model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME, 
+    torch_dtype=torch.bfloat16
+)
+base_model = prepare_model_for_kbit_training(base_model)
 
-# Prepare each for LoRA / k-bit if needed
-base_model_policy = prepare_model_for_kbit_training(base_model_policy)
-base_model_reward = prepare_model_for_kbit_training(base_model_reward)
-base_model_reference = prepare_model_for_kbit_training(base_model_reference)
+# --- 2. Create the PEFT model and load all adapters ---
+# Load the first adapter which becomes the default
+policy_lm = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="policy")
 
-# Wrap with different PEFTs
-policy_lm = PeftModel.from_pretrained(base_model_policy, SFT_ADAPTER_PATH, adapter_name="policy")
-reward_lm = PeftModel.from_pretrained(base_model_reward, REWARD_ADAPTER_PATH, adapter_name="reward")
-reference_lm = PeftModel.from_pretrained(base_model_reference, SFT_ADAPTER_PATH, adapter_name="sft")
+# Load the other adapters without merging
+policy_lm.load_adapter(SFT_ADAPTER_PATH, adapter_name="sft")
+policy_lm.load_adapter(REWARD_ADAPTER_PATH, adapter_name="reward")
 
+# --- 3. The same peft model is used for all roles ---
+# We just need to ensure the correct adapter is active before a forward pass
 policy_lm.to(DEVICE)
-reward_lm.to(DEVICE)
-reference_lm.to(DEVICE)
 
 class RewardModel(nn.Module):
     def __init__(self, base_lm):
@@ -75,7 +75,7 @@ class RewardModel(nn.Module):
         rewards = self.reward_head(last_hidden[:, -1, :]).squeeze(-1)
         return rewards
 
-reward_model = RewardModel(reward_lm).to(DEVICE)
+reward_model = RewardModel(policy_lm).to(DEVICE)
 
 # Also load the reward head
 head_weights_path = os.path.join(REWARD_ADAPTER_PATH, "reward_head.pt")
@@ -178,6 +178,10 @@ for epoch in range(EPOCHS):
             attention_mask = batch["attention_mask"].to(DEVICE)
 
             # === 1) Rollout ===
+            # Set the active adapter to 'policy' for generation
+            policy_lm.set_adapter("policy")
+            policy_lm.train() # Use train mode for generation to ensure dropout is active if it was during SFT
+
             with autocast(device_type=DEVICE, dtype=torch.bfloat16):
                 output = policy_lm.generate(
                     input_ids=input_ids,
@@ -197,11 +201,13 @@ for epoch in range(EPOCHS):
 
             # === 2) Reward ===
             with torch.no_grad():
+                policy_lm.set_adapter("reward") # Activate reward adapter
                 reward = reward_model(full_ids, full_attention_mask)
 
             # === 3) Old log probs ===
             with torch.no_grad():
-                old_outputs = reference_lm(input_ids=full_ids, attention_mask=full_attention_mask)
+                policy_lm.set_adapter("sft") # Activate reference SFT adapter
+                old_outputs = policy_lm(input_ids=full_ids, attention_mask=full_attention_mask)
                 logits = old_outputs.logits[:, :-1, :]
                 labels = full_ids[:, 1:]
                 log_probs = torch.log_softmax(logits, dim=-1)
@@ -214,6 +220,7 @@ for epoch in range(EPOCHS):
             # === 4) PPO Update ===
             # We do one forward pass with the policy model to get new logprobs and values
             with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                policy_lm.set_adapter("policy") # Activate trainable policy adapter
                 outputs, values = policy_model_with_value(full_ids, full_attention_mask)
                 
                 logits = outputs.logits[:, :-1, :]
