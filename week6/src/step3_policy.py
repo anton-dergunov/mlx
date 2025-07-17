@@ -23,13 +23,14 @@ POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
 MAX_LEN = 256
 EPOCHS = 1
-BATCH_SIZE = 4
+BATCH_SIZE = 6
 
+LR = 1e-5
 PPO_EPOCHS = 4
 CLIP_EPS = 0.2
 
 EVAL_INTERVAL = 100
-SAVE_INTERVAL = 400
+SAVE_INTERVAL = 200
 
 
 # --------------------------
@@ -62,6 +63,21 @@ print("Loaded SFT weights as new adapter 'policy'.")
 # Move the final multi-adapter model to the device
 policy_model.to(DEVICE)
 
+# Extend policy model with value head (to provide the predicted value of the state under the policy)
+class PolicyWithValue(nn.Module):
+    def __init__(self, base_lm):
+        super().__init__()
+        self.base_lm = base_lm
+        self.value_head = nn.Linear(base_lm.config.hidden_size, 1, bias=False).to(base_lm.dtype)
+
+    def forward(self, input_ids, attention_mask):
+        output = self.base_lm(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+        last_hidden = output.hidden_states[-1]  # (batch, seq_len, hidden)
+        values = self.value_head(last_hidden[:, -1, :]).squeeze(-1)  # (batch,)
+        return output, values
+    
+policy_model_with_value = PolicyWithValue(policy_model).to(DEVICE)
+
 # 4. Define and instantiate the RewardModel wrapper
 # It will use the SAME underlying model but with a specific head
 class RewardModel(nn.Module):
@@ -83,12 +99,16 @@ reward_model = RewardModel(policy_model).to(DEVICE)
 head_weights_path = os.path.join(REWARD_ADAPTER_PATH, "reward_head.pt")
 state_dict = torch.load(head_weights_path, map_location=DEVICE)
 reward_model.reward_head.load_state_dict(state_dict)
-print(f"✅ Loaded reward head weights from: {head_weights_path}")
+print(f"Loaded reward head weights from: {head_weights_path}")
 
 reward_model.eval()
 
-# Update the optimizer to target only the 'policy' adapter's parameters
-optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, policy_model.parameters()), lr=1e-5)
+# Update the optimizer to target only the 'policy' adapter's parameters and value_head params
+optimizer = torch.optim.AdamW(
+    list(filter(lambda p: p.requires_grad, policy_model.parameters())) +
+    list(policy_model_with_value.value_head.parameters()),
+    lr=LR
+)
 
 # Load dataset
 dataset = load_dataset(DATASET_NAME, split="train")
@@ -148,7 +168,6 @@ for epoch in range(EPOCHS):
     loop = tqdm(loader)
     for batch in loop:
         try:
-
             input_ids = batch["input_ids"].to(DEVICE)
             attention_mask = batch["attention_mask"].to(DEVICE)
 
@@ -171,12 +190,13 @@ for epoch in range(EPOCHS):
 
             # Detach completions
             completions = []
-            for j in range(BATCH_SIZE):
+            current_batch_size = input_ids.size(0)
+            for j in range(current_batch_size):
                 gen = output[j][input_ids.shape[1]:]
                 completions.append(gen.unsqueeze(0))
             completions = torch.cat(completions, dim=0)
 
-            generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(BATCH_SIZE)]
+            generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(current_batch_size)]
 
             # Combine prompt + generated
             full_ids = torch.cat([input_ids, completions], dim=1)
@@ -207,17 +227,16 @@ for epoch in range(EPOCHS):
                 )
                 old_logprobs = old_logprobs_per_token.view(old_labels.shape).sum(dim=1)
 
-            advantage = reward  # simple version, no baseline
-
             # === 4) PPO update ===
             # Set the adapter back to 'policy' for the training step
             policy_model.set_adapter("policy")
             for ppo_epoch in range(PPO_EPOCHS):
                 with autocast(DEVICE, dtype=torch.bfloat16):
-                    outputs = policy_model(
+                    outputs, values = policy_model_with_value(
                         input_ids=full_ids,
                         attention_mask=full_attention_mask
                     )
+
                     logits = outputs.logits[:, :-1, :]
                     labels = full_ids[:, 1:]
 
@@ -227,17 +246,25 @@ for epoch in range(EPOCHS):
 
                     ratio = torch.exp(logprobs - old_logprobs.detach())
                     clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+
+                    # Advantage = reward - value
+                    advantage = (reward - values).detach()
+
                     surrogate1 = ratio * advantage
                     surrogate2 = clipped_ratio * advantage
 
                     ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-                # The backward pass will now correctly only affect 'policy' adapter weights
+                    # Add a value loss too (MSE)
+                    value_loss = nn.functional.mse_loss(values, reward)
+
+                    total_loss = ppo_loss + value_loss
+
                 optimizer.zero_grad()
-                ppo_loss.backward()
+                total_loss.backward()
                 optimizer.step()
 
-                running_loss += ppo_loss.item()
+                running_loss += total_loss.item()
 
         except RuntimeError as e:
             if "out of memory" in str(e):
@@ -266,8 +293,10 @@ for epoch in range(EPOCHS):
         if global_step % SAVE_INTERVAL == 0:
             ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{global_step}"
             policy_model.save_pretrained(ckpt_path)
-            print(f"Saved interim LoRA to {ckpt_path}")
+            torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(ckpt_path, "value_head.pt"))
+            print(f"Saved interim LoRA and value head to {ckpt_path}")
 
 # Save only LoRA weights
 policy_model.save_pretrained(POLICY_OUTPUT_PATH)
-print(f"Saved policy LoRA adapter to {POLICY_OUTPUT_PATH}")
+torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(POLICY_OUTPUT_PATH, "value_head.pt"))
+print(f"Saved policy LoRA adapter and value head to {POLICY_OUTPUT_PATH}")
