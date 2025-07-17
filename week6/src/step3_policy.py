@@ -21,12 +21,13 @@ SFT_ADAPTER_PATH = "models/qwen3_sft_lora"
 REWARD_ADAPTER_PATH = "models/qwen3_reward_lora"
 POLICY_OUTPUT_PATH = "models/qwen3_policy_lora"
 
-MAX_LEN = 256
+MAX_PROMPT_LEN = 256
+MAX_NEW_TOKENS = 64
 EPOCHS = 1
 BATCH_SIZE = 6
 
 LR = 1e-5
-PPO_EPOCHS = 4
+PPO_EPOCHS = 1
 CLIP_EPS = 0.2
 
 EVAL_INTERVAL = 100
@@ -62,6 +63,12 @@ print("Loaded SFT weights as new adapter 'policy'.")
 
 # Move the final multi-adapter model to the device
 policy_model.to(DEVICE)
+
+# Compile to speed up flash attention & transformer decoding
+torch.backends.cuda.enable_mem_efficient_sdp(True)
+torch.backends.cuda.enable_flash_sdp(True)
+torch.set_float32_matmul_precision("high")
+policy_model = torch.compile(policy_model)
 
 # Extend policy model with value head (to provide the predicted value of the state under the policy)
 class PolicyWithValue(nn.Module):
@@ -122,7 +129,7 @@ def preprocess_function(ex):
     encoding = tokenizer(
         prompt,
         truncation=True,
-        max_length=MAX_LEN,
+        max_length=MAX_PROMPT_LEN,
     )
     return {
         "input_ids": encoding["input_ids"],
@@ -157,7 +164,8 @@ loader = DataLoader(
     batch_size=BATCH_SIZE,
     shuffle=True,
     collate_fn=collate_fn,
-    num_workers=2,
+    num_workers=8,
+    prefetch_factor=2,
     pin_memory=True  # this helps CPU→GPU transfer
 )
 
@@ -176,11 +184,11 @@ for epoch in range(EPOCHS):
             policy_model.set_adapter("policy")
             policy_model.train() # Use train mode for generation to ensure dropout is active if it was during SFT
 
-            with torch.no_grad():
+            with torch.inference_mode(), autocast(device_type=DEVICE, dtype=torch.bfloat16):
                 output = policy_model.generate(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
-                    max_new_tokens=MAX_LEN,
+                    max_new_tokens = MAX_NEW_TOKENS,
                     do_sample=True,
                     top_k=50,
                     top_p=0.95,
@@ -188,13 +196,8 @@ for epoch in range(EPOCHS):
                     pad_token_id=tokenizer.eos_token_id
                 )
 
-            # Detach completions
-            completions = []
             current_batch_size = input_ids.size(0)
-            for j in range(current_batch_size):
-                gen = output[j][input_ids.shape[1]:]
-                completions.append(gen.unsqueeze(0))
-            completions = torch.cat(completions, dim=0)
+            completions = output[:, input_ids.shape[1]:]
 
             generated = [tokenizer.decode(completions[i], skip_special_tokens=True) for i in range(current_batch_size)]
 
@@ -247,6 +250,8 @@ for epoch in range(EPOCHS):
                     ratio = torch.exp(logprobs - old_logprobs.detach())
                     clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
 
+                    # Clip reward to avoid unbounded rewards
+                    reward = torch.clamp(reward, -5.0, 5.0)
                     # Advantage = reward - value
                     advantage = (reward - values).detach()
 
