@@ -7,8 +7,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, prepare_model_for_kbit_training
 from datasets import load_dataset
 from functools import partial
-#from tqdm import tqdm
-from torch.profiler import profile, record_function, ProfilerActivity
+from tqdm import tqdm
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Fix tokenizer warnings
@@ -173,150 +172,135 @@ running_loss = 0.0
 
 # Training loop
 for epoch in range(EPOCHS):
-    with profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=5, repeat=1), # Ignores first 2 steps, profiles the next 5
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/ppo'), # Optional: for viewing in Tensorboard
-        record_shapes=True,
-        with_stack=True
-    ) as prof:
-        for i, batch in enumerate(loader):
-            if i >= (1 + 1 + 5) * 1: break
+    for batch in tqdm(loader):
+        try:
+            input_ids = batch["input_ids"].to(DEVICE)
+            attention_mask = batch["attention_mask"].to(DEVICE)
 
-        #for batch in tqdm(loader):
-            try:
-                input_ids = batch["input_ids"].to(DEVICE)
-                attention_mask = batch["attention_mask"].to(DEVICE)
+            # === 1) Rollout ===
+            # Set the active adapter to 'policy' for generation
+            policy_lm.set_adapter("policy")
+            policy_lm.train() # Use train mode for generation to ensure dropout is active if it was during SFT
 
-                # === 1) Rollout ===
-                # Set the active adapter to 'policy' for generation
-                policy_lm.set_adapter("policy")
-                policy_lm.train() # Use train mode for generation to ensure dropout is active if it was during SFT
+            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                output = policy_lm.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens = MAX_NEW_TOKENS,
+                    do_sample=True,
+                    top_k=50,
+                    top_p=0.95,
+                    temperature=1.0,
+                    pad_token_id=tokenizer.eos_token_id,
+                    use_cache=True
+                )
 
-                with autocast(device_type=DEVICE, dtype=torch.bfloat16):
-                    output = policy_lm.generate(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        max_new_tokens = MAX_NEW_TOKENS,
-                        do_sample=True,
-                        top_k=50,
-                        top_p=0.95,
-                        temperature=1.0,
-                        pad_token_id=tokenizer.eos_token_id,
-                        use_cache=True
-                    )
+            completions = output[:, input_ids.shape[1]:]
+            full_ids = torch.cat([input_ids, completions], dim=1)
+            full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
 
-                completions = output[:, input_ids.shape[1]:]
-                full_ids = torch.cat([input_ids, completions], dim=1)
-                full_attention_mask = torch.ones_like(full_ids).to(DEVICE)
+            # === 2) Reward ===
+            with torch.no_grad():
+                policy_lm.set_adapter("reward") # Activate reward adapter
+                reward = reward_model(full_ids, full_attention_mask)
 
-                # === 2) Reward ===
-                with torch.no_grad():
-                    policy_lm.set_adapter("reward") # Activate reward adapter
-                    reward = reward_model(full_ids, full_attention_mask)
+            # === 3) Old log probs ===
+            with torch.no_grad():
+                policy_lm.set_adapter("sft") # Activate reference SFT adapter
+                old_outputs = policy_lm(input_ids=full_ids, attention_mask=full_attention_mask)
+                logits = old_outputs.logits[:, :-1, :]
+                labels = full_ids[:, 1:]
+                log_probs = torch.log_softmax(logits, dim=-1)
+                token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                prompt_len = input_ids.shape[1]
+                # The logprobs are for tokens from index 1 to end, so the completion starts at index (prompt_len - 1)
+                completion_log_probs = token_log_probs[:, prompt_len - 1:]
+                old_logprobs = completion_log_probs.sum(dim=1)
 
-                # === 3) Old log probs ===
-                with torch.no_grad():
-                    policy_lm.set_adapter("sft") # Activate reference SFT adapter
-                    old_outputs = policy_lm(input_ids=full_ids, attention_mask=full_attention_mask)
-                    logits = old_outputs.logits[:, :-1, :]
-                    labels = full_ids[:, 1:]
-                    log_probs = torch.log_softmax(logits, dim=-1)
-                    token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                    prompt_len = input_ids.shape[1]
-                    # The logprobs are for tokens from index 1 to end, so the completion starts at index (prompt_len - 1)
-                    completion_log_probs = token_log_probs[:, prompt_len - 1:]
-                    old_logprobs = completion_log_probs.sum(dim=1)
+            # === 4) PPO Update ===
+            # We do one forward pass with the policy model to get new logprobs and values
+            with autocast(device_type=DEVICE, dtype=torch.bfloat16):
+                policy_lm.set_adapter("policy") # Activate trainable policy adapter
+                outputs, values = policy_model_with_value(full_ids, full_attention_mask)
+                
+                logits = outputs.logits[:, :-1, :]
+                log_probs = torch.log_softmax(logits, dim=-1)
+                token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
 
-                # === 4) PPO Update ===
-                # We do one forward pass with the policy model to get new logprobs and values
-                with autocast(device_type=DEVICE, dtype=torch.bfloat16):
-                    policy_lm.set_adapter("policy") # Activate trainable policy adapter
-                    outputs, values = policy_model_with_value(full_ids, full_attention_mask)
-                    
-                    logits = outputs.logits[:, :-1, :]
-                    log_probs = torch.log_softmax(logits, dim=-1)
-                    token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
+                prompt_len = input_ids.shape[1]
+                completion_log_probs = token_log_probs[:, prompt_len - 1:]
+                new_logprobs = completion_log_probs.sum(dim=1)
 
-                    prompt_len = input_ids.shape[1]
-                    completion_log_probs = token_log_probs[:, prompt_len - 1:]
-                    new_logprobs = completion_log_probs.sum(dim=1)
+                # Detach values here to stop gradients from flowing through the value loss to the policy loss
+                values_detached = values.detach()
 
-                    # Detach values here to stop gradients from flowing through the value loss to the policy loss
-                    values_detached = values.detach()
+                # --- Calculate KL divergence and build the final reward signal ---
+                kl_div = new_logprobs - old_logprobs # old_logprobs is already detached
+                
+                # Clip the raw reward from the reward model
+                clipped_reward = torch.clamp(reward, -5.0, 5.0)
+                
+                # The final reward signal is the clipped reward minus the KL penalty
+                final_reward = clipped_reward - KL_BETA * kl_div
+                
+                # --- Calculate advantage ---
+                advantage = (final_reward - values_detached).detach()
 
-                    # --- Calculate KL divergence and build the final reward signal ---
-                    kl_div = new_logprobs - old_logprobs # old_logprobs is already detached
-                    
-                    # Clip the raw reward from the reward model
-                    clipped_reward = torch.clamp(reward, -5.0, 5.0)
-                    
-                    # The final reward signal is the clipped reward minus the KL penalty
-                    final_reward = clipped_reward - KL_BETA * kl_div
-                    
-                    # --- Calculate advantage ---
-                    advantage = (final_reward - values_detached).detach()
+                # --- Calculate PPO policy loss ---
+                ratio = torch.exp(new_logprobs - old_logprobs) # new_logprobs has gradients, old_logprobs does not
+                
+                surrogate1 = ratio * advantage
+                surrogate2 = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS) * advantage
+                
+                # Minus sign because we perform gradient ascent (maximize objective)
+                ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-                    # --- Calculate PPO policy loss ---
-                    ratio = torch.exp(new_logprobs - old_logprobs) # new_logprobs has gradients, old_logprobs does not
-                    
-                    surrogate1 = ratio * advantage
-                    surrogate2 = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS) * advantage
-                    
-                    # Minus sign because we perform gradient ascent (maximize objective)
-                    ppo_loss = -torch.min(surrogate1, surrogate2).mean()
+                # --- Calculate value loss ---
+                # The value function is trained to predict the RAW, unpenalized reward
+                # This is important as the value function's goal is to predict the environment's reward
+                value_loss = nn.functional.mse_loss(values, clipped_reward)
 
-                    # --- Calculate value loss ---
-                    # The value function is trained to predict the RAW, unpenalized reward
-                    # This is important as the value function's goal is to predict the environment's reward
-                    value_loss = nn.functional.mse_loss(values, clipped_reward)
+                # --- Combine losses ---
+                total_loss = ppo_loss + value_loss
 
-                    # --- Combine losses ---
-                    total_loss = ppo_loss + value_loss
+            optimizer.zero_grad()
+            total_loss.backward()
+            optimizer.step()
 
-                optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
+            running_loss += total_loss.item()
 
-                running_loss += total_loss.item()
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print(f"⚠️ OOM at global_step={global_step} batch={input_ids.shape}")
+                optimizer.zero_grad(set_to_none=True)
+                torch.cuda.empty_cache()
+                continue
+            else:
+                raise
 
-            except RuntimeError as e:
-                if "out of memory" in str(e):
-                    print(f"⚠️ OOM at global_step={global_step} batch={input_ids.shape}")
-                    optimizer.zero_grad(set_to_none=True)
-                    torch.cuda.empty_cache()
-                    continue
-                else:
-                    raise
+        global_step += 1
 
-            global_step += 1
+        if global_step % EVAL_INTERVAL == 0:
+            avg_loss = running_loss / max(1, EVAL_INTERVAL)
+            running_loss = 0.0
 
-            if global_step % EVAL_INTERVAL == 0:
-                avg_loss = running_loss / max(1, EVAL_INTERVAL)
-                running_loss = 0.0
+            prompt_text = tokenizer.decode(input_ids[0], skip_special_tokens=True)
+            generated_text = tokenizer.decode(completions[0], skip_special_tokens=True)
 
-                prompt_text = tokenizer.decode(input_ids[0], skip_special_tokens=True)
-                generated_text = tokenizer.decode(completions[0], skip_special_tokens=True)
+            print(f"=== Step {global_step} ===")
+            print(f"**Prompt**: {prompt_text[:200]}...")
+            print(f"**Generated**: {generated_text[:200]}...")
+            print(f"**Reward**: {reward[0].item():.4f}")
+            print(f"**Avg PPO loss**: {avg_loss:.4f}")
 
-                print(f"=== Step {global_step} ===")
-                print(f"**Prompt**: {prompt_text[:200]}...")
-                print(f"**Generated**: {generated_text[:200]}...")
-                print(f"**Reward**: {reward[0].item():.4f}")
-                print(f"**Avg PPO loss**: {avg_loss:.4f}")
+        # Save LoRA checkpoint
+        if global_step % SAVE_INTERVAL == 0:
+            ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{global_step}"
+            policy_lm.save_pretrained(ckpt_path)
+            torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(ckpt_path, "value_head.pt"))
+            print(f"Saved interim LoRA and value head to {ckpt_path}")
 
-            # Save LoRA checkpoint
-            if global_step % SAVE_INTERVAL == 0:
-                ckpt_path = f"{POLICY_OUTPUT_PATH}_ckpt_step_{global_step}"
-                policy_lm.save_pretrained(ckpt_path)
-                torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(ckpt_path, "value_head.pt"))
-                print(f"Saved interim LoRA and value head to {ckpt_path}")
-            
-            prof.step()
-
-print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=15))
-print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=15))
-
-# # Save only LoRA weights
-# policy_lm.save_pretrained(POLICY_OUTPUT_PATH)
-# torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(POLICY_OUTPUT_PATH, "value_head.pt"))
-# print(f"Saved policy LoRA adapter and value head to {POLICY_OUTPUT_PATH}")
+# Save only LoRA weights
+policy_lm.save_pretrained(POLICY_OUTPUT_PATH)
+torch.save(policy_model_with_value.value_head.state_dict(), os.path.join(POLICY_OUTPUT_PATH, "value_head.pt"))
+print(f"Saved policy LoRA adapter and value head to {POLICY_OUTPUT_PATH}")
