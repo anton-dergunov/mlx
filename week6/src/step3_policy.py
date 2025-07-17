@@ -29,6 +29,7 @@ BATCH_SIZE = 6
 LR = 1e-5
 PPO_EPOCHS = 1
 CLIP_EPS = 0.2
+KL_BETA = 0.1
 
 EVAL_INTERVAL = 100
 SAVE_INTERVAL = 200
@@ -205,27 +206,54 @@ for epoch in range(EPOCHS):
                 labels = full_ids[:, 1:]
                 log_probs = torch.log_softmax(logits, dim=-1)
                 token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                old_logprobs = token_log_probs.sum(dim=1)
+                prompt_len = input_ids.shape[1]
+                # The logprobs are for tokens from index 1 to end, so the completion starts at index (prompt_len - 1)
+                completion_log_probs = token_log_probs[:, prompt_len - 1:]
+                old_logprobs = completion_log_probs.sum(dim=1)
 
-            # === 4) PPO update ===
+            # === 4) PPO Update ===
+            # We do one forward pass with the policy model to get new logprobs and values
             with autocast(device_type=DEVICE, dtype=torch.bfloat16):
                 outputs, values = policy_model_with_value(full_ids, full_attention_mask)
+                
                 logits = outputs.logits[:, :-1, :]
                 log_probs = torch.log_softmax(logits, dim=-1)
                 token_log_probs = log_probs.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                new_logprobs = token_log_probs.sum(dim=1)
 
-                ratio = torch.exp(new_logprobs - old_logprobs.detach())
-                clipped_ratio = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS)
+                prompt_len = input_ids.shape[1]
+                completion_log_probs = token_log_probs[:, prompt_len - 1:]
+                new_logprobs = completion_log_probs.sum(dim=1)
 
-                reward = torch.clamp(reward, -5.0, 5.0)
-                advantage = (reward - values).detach()
+                # Detach values here to stop gradients from flowing through the value loss to the policy loss
+                values_detached = values.detach()
 
+                # --- Calculate KL divergence and build the final reward signal ---
+                kl_div = new_logprobs - old_logprobs # old_logprobs is already detached
+                
+                # Clip the raw reward from the reward model
+                clipped_reward = torch.clamp(reward, -5.0, 5.0)
+                
+                # The final reward signal is the clipped reward minus the KL penalty
+                final_reward = clipped_reward - KL_BETA * kl_div
+                
+                # --- Calculate advantage ---
+                advantage = (final_reward - values_detached).detach()
+
+                # --- Calculate PPO policy loss ---
+                ratio = torch.exp(new_logprobs - old_logprobs) # new_logprobs has gradients, old_logprobs does not
+                
                 surrogate1 = ratio * advantage
-                surrogate2 = clipped_ratio * advantage
+                surrogate2 = torch.clamp(ratio, 1 - CLIP_EPS, 1 + CLIP_EPS) * advantage
+                
+                # Minus sign because we perform gradient ascent (maximize objective)
                 ppo_loss = -torch.min(surrogate1, surrogate2).mean()
 
-                value_loss = nn.functional.mse_loss(values, reward)
+                # --- Calculate value loss ---
+                # The value function is trained to predict the RAW, unpenalized reward
+                # This is important as the value function's goal is to predict the environment's reward
+                value_loss = nn.functional.mse_loss(values, clipped_reward)
+
+                # --- Combine losses ---
                 total_loss = ppo_loss + value_loss
 
             optimizer.zero_grad()
