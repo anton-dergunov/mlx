@@ -42,18 +42,20 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "left"  # do the padding on the left side for generate such as [PAD PAD prompt prompt prompt]
 
-# 1. Load the base model and prepare it for k-bit training
-base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
-base_model = prepare_model_for_kbit_training(base_model)
+# Separate base instances
+base_model_policy = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+base_model_reward = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
+base_model_reference = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16)
 
-policy_lm = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="policy")
-print("Initialized policy model.")
+# Prepare each for LoRA / k-bit if needed
+base_model_policy = prepare_model_for_kbit_training(base_model_policy)
+base_model_reward = prepare_model_for_kbit_training(base_model_reward)
+base_model_reference = prepare_model_for_kbit_training(base_model_reference)
 
-reward_lm = PeftModel.from_pretrained(base_model, REWARD_ADAPTER_PATH, adapter_name="reward")
-print("Initialized reward model.")
-
-reference_lm = PeftModel.from_pretrained(base_model, SFT_ADAPTER_PATH, adapter_name="sft")
-print("Initialized reference model.")
+# Wrap with different PEFTs
+policy_lm = PeftModel.from_pretrained(base_model_policy, SFT_ADAPTER_PATH, adapter_name="policy")
+reward_lm = PeftModel.from_pretrained(base_model_reward, REWARD_ADAPTER_PATH, adapter_name="reward")
+reference_lm = PeftModel.from_pretrained(base_model_reference, SFT_ADAPTER_PATH, adapter_name="sft")
 
 policy_lm.to(DEVICE)
 reward_lm.to(DEVICE)
